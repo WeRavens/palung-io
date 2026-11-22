@@ -1905,101 +1905,147 @@ function getZoneLabelAtDepth(depth) {
   return { text: "🟢 ZONA PLANKTON", color: "#10b981" };
 }
 
-// Gambar Udang/Krill Bioluminesensi Bercahaya (Ikonik ala Krillion.io!)
-function drawGlowingKrill(ctx2d, x, y, now, scale, isMe, color, avatar, labelText, wordTag, isCollision, isSole) {
+// Gambar Kapal Selam Ikonik PALUNG.IO (Periskop, Jendela Maskot, Baling-baling & Sorot Lampu)
+function drawPalungSubmarine(ctx2d, x, y, now, scale, isMe, color, avatar, labelText, wordTag, isCollision, isSole, camDepth, isDiving) {
   ctx2d.save();
   ctx2d.translate(x, y);
   ctx2d.scale(scale, scale);
 
-  // Cahaya halo bawah laut
-  const glowColor = isCollision ? "rgba(244, 63, 94, 0.55)" : isMe ? "rgba(251, 113, 133, 0.45)" : "rgba(56, 189, 248, 0.25)";
-  const radGrad = ctx2d.createRadialGradient(0, 0, 2, 0, 0, isMe ? 36 : 26);
-  radGrad.addColorStop(0, glowColor);
+  const hullColor = isCollision ? "#f43f5e" : isMe ? "#facc15" : color || "#38bdf8";
+  const subW = 48;
+  const subH = 22;
+
+  // 1. Sorot Lampu Kapal Selam ke Bawah (Makin terang saat makin dalam!)
+  const beamAlpha = Math.min(0.42, 0.09 + ((camDepth || 0) / 3000) * 0.33);
+  const beamGrad = ctx2d.createLinearGradient(0, 6, 0, 92);
+  beamGrad.addColorStop(0, isMe ? `rgba(254, 240, 138, ${beamAlpha})` : `rgba(186, 230, 253, ${beamAlpha * 0.7})`);
+  beamGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
+  ctx2d.beginPath();
+  ctx2d.moveTo(-10, subH / 2);
+  ctx2d.lineTo(-34, 92);
+  ctx2d.lineTo(34, 92);
+  ctx2d.lineTo(10, subH / 2);
+  ctx2d.closePath();
+  ctx2d.fillStyle = beamGrad;
+  ctx2d.fill();
+
+  // 2. Halo Bioluminesensi
+  const radGrad = ctx2d.createRadialGradient(0, 0, 4, 0, 0, isMe ? 38 : 28);
+  radGrad.addColorStop(0, isCollision ? "rgba(244, 63, 94, 0.45)" : isMe ? "rgba(250, 204, 21, 0.32)" : "rgba(56, 189, 248, 0.22)");
   radGrad.addColorStop(1, "rgba(0,0,0,0)");
   ctx2d.fillStyle = radGrad;
   ctx2d.beginPath();
-  ctx2d.arc(0, 0, isMe ? 36 : 26, 0, Math.PI * 2);
+  ctx2d.arc(0, 0, isMe ? 38 : 28, 0, Math.PI * 2);
   ctx2d.fill();
 
   if (isSole) {
     ctx2d.beginPath();
-    ctx2d.arc(0, 0, 24 + Math.sin(now * 0.01) * 3, 0, Math.PI * 2);
-    ctx2d.strokeStyle = "rgba(250, 204, 21, 0.78)";
+    ctx2d.arc(0, 0, 30 + Math.sin(now * 0.01) * 3, 0, Math.PI * 2);
+    ctx2d.strokeStyle = "rgba(250, 204, 21, 0.82)";
     ctx2d.lineWidth = 2;
     ctx2d.stroke();
   }
 
-  // Gambar Krill / Udang Bercahaya (Melengkung elegan)
-  const bodyColor = isMe ? "#fb7185" : color || "#38bdf8";
+  // 3. Badan Kapal Selam (Sedikit menukik saat diving)
   ctx2d.save();
-  ctx2d.rotate(Math.sin(now * 0.005) * 0.08);
-  ctx2d.strokeStyle = bodyColor;
-  ctx2d.fillStyle = bodyColor;
-  ctx2d.shadowColor = bodyColor;
-  ctx2d.shadowBlur = isMe ? 14 : 6;
+  ctx2d.rotate((isDiving ? 0.14 : 0) + Math.sin(now * 0.004) * 0.04);
 
-  // Segmen tubuh krill
-  const segs = [
-    { x: -2, y: -6, r: 5.2 },
-    { x: 3, y: -2, r: 4.8 },
-    { x: 4, y: 4, r: 4.0 },
-    { x: 0, y: 9, r: 3.1 },
-    { x: -6, y: 11, r: 2.3 }
-  ];
-  segs.forEach((s) => {
-    ctx2d.beginPath();
-    ctx2d.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx2d.fill();
-  });
-
-  // Antena panjang melengkung
-  ctx2d.lineWidth = 1.4;
+  // Sirip ekor & Baling-baling belakang (kiri)
+  ctx2d.fillStyle = "#f43f5e";
   ctx2d.beginPath();
-  ctx2d.moveTo(-4, -9);
-  ctx2d.quadraticCurveTo(-12, -18, -4, -22);
-  ctx2d.moveTo(-1, -10);
-  ctx2d.quadraticCurveTo(-5, -20, 4, -21);
-  ctx2d.stroke();
-
-  // Mata kecil bercahaya
-  ctx2d.fillStyle = "#ffffff";
-  ctx2d.beginPath();
-  ctx2d.arc(-4.5, -7, 1.5, 0, Math.PI * 2);
+  ctx2d.moveTo(-subW / 2 + 2, 0);
+  ctx2d.lineTo(-subW / 2 - 8, -7);
+  ctx2d.lineTo(-subW / 2 - 8, 7);
+  ctx2d.closePath();
   ctx2d.fill();
-  ctx2d.restore();
 
-  // Avatar maskot kecil di samping krill jika bukan default
-  if (avatar && avatar !== "🤿") {
-    ctx2d.font = "12px sans-serif";
-    ctx2d.textAlign = "left";
-    ctx2d.textBaseline = "middle";
-    ctx2d.fillText(avatar, 13, -6);
+  // Gelembung jejak baling-baling
+  if (isDiving || Math.sin(now * 0.01) > 0) {
+    ctx2d.fillStyle = "rgba(186, 230, 253, 0.65)";
+    ctx2d.beginPath();
+    ctx2d.arc(-subW / 2 - 12, Math.sin(now * 0.02) * 3, 2.2, 0, Math.PI * 2);
+    ctx2d.arc(-subW / 2 - 17, Math.cos(now * 0.02) * 4, 1.5, 0, Math.PI * 2);
+    ctx2d.fill();
   }
 
-  // Label nama di atas krill
+  // Menara & Periskop
+  ctx2d.fillStyle = hullColor;
+  ctx2d.beginPath();
+  ctx2d.roundRect(-8, -subH / 2 - 7, 16, 8, 3);
+  ctx2d.fill();
+  ctx2d.strokeStyle = hullColor;
+  ctx2d.lineWidth = 2.5;
+  ctx2d.lineCap = "round";
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, -subH / 2 - 6);
+  ctx2d.lineTo(0, -subH / 2 - 13);
+  ctx2d.lineTo(6, -subH / 2 - 13);
+  ctx2d.stroke();
+
+  // Lampu beacon kecil di atas periskop
+  ctx2d.fillStyle = isCollision ? "#f43f5e" : "#38bdf8";
+  ctx2d.beginPath();
+  ctx2d.arc(7, -subH / 2 - 13, 2, 0, Math.PI * 2);
+  ctx2d.fill();
+
+  // Lambung Utama Kapal Selam
+  ctx2d.shadowColor = hullColor;
+  ctx2d.shadowBlur = isMe ? 14 : 6;
+  ctx2d.beginPath();
+  ctx2d.roundRect(-subW / 2, -subH / 2, subW, subH, subH / 2);
+  ctx2d.fillStyle = isMe ? "#0f172a" : "#091528";
+  ctx2d.fill();
+  ctx2d.lineWidth = isMe ? 2.8 : 2;
+  ctx2d.strokeStyle = hullColor;
+  ctx2d.stroke();
+  ctx2d.shadowBlur = 0;
+
+  // Jendela Kaca Bulat dengan Maskot Pemain di Dalamnya
+  ctx2d.beginPath();
+  ctx2d.arc(3, 0, 8.5, 0, Math.PI * 2);
+  ctx2d.fillStyle = "#0369a1";
+  ctx2d.fill();
+  ctx2d.lineWidth = 1.6;
+  ctx2d.strokeStyle = "#7dd3fc";
+  ctx2d.stroke();
+
+  ctx2d.font = "11px sans-serif";
+  ctx2d.textAlign = "center";
+  ctx2d.textBaseline = "middle";
+  ctx2d.fillText(avatar || "🤿", 3, 0.5);
+
+  // Jendela kecil tambahan di sisi kiri
+  ctx2d.beginPath();
+  ctx2d.arc(-13, 0, 3.8, 0, Math.PI * 2);
+  ctx2d.fillStyle = "#38bdf8";
+  ctx2d.fill();
+
+  ctx2d.restore();
+
+  // 4. Label Nama di Atas Kapal Selam
   if (labelText) {
     ctx2d.font = "700 10px Outfit, sans-serif";
     ctx2d.textAlign = "center";
-    ctx2d.fillStyle = isMe ? "#bae6fd" : "rgba(203, 213, 225, 0.78)";
-    ctx2d.fillText(labelText, 0, -27);
+    ctx2d.fillStyle = isMe ? "#fef08a" : "rgba(203, 213, 225, 0.82)";
+    ctx2d.fillText(labelText, 0, -29);
   }
 
-  // Kartu Kata Jawaban (Saat Descend! ala "SARCOIDOSIS" ▼)
+  // 5. Kartu Kata Jawaban di Bawah Kapal Selam (Saat Descend)
   if (wordTag) {
     ctx2d.font = "800 11px Outfit, monospace";
     const tw = ctx2d.measureText(wordTag).width + 18;
     ctx2d.save();
-    ctx2d.translate(0, 30);
-    ctx2d.rotate(isMe ? -0.025 : 0.015);
-    ctx2d.fillStyle = "rgba(4, 13, 28, 0.9)";
-    ctx2d.strokeStyle = isCollision ? "#f43f5e" : isMe ? "#fb7185" : "rgba(56, 189, 248, 0.5)";
+    ctx2d.translate(0, 29);
+    ctx2d.rotate(isMe ? -0.02 : 0.015);
+    ctx2d.fillStyle = "rgba(4, 13, 28, 0.92)";
+    ctx2d.strokeStyle = isCollision ? "#f43f5e" : isMe ? "#facc15" : "rgba(56, 189, 248, 0.55)";
     ctx2d.lineWidth = 1.4;
     ctx2d.beginPath();
     ctx2d.roundRect(-tw / 2, -10, tw, 22, 6);
     ctx2d.fill();
     ctx2d.stroke();
 
-    ctx2d.fillStyle = isCollision ? "#fda4af" : isMe ? "#ff8fa3" : "#e2e8f0";
+    ctx2d.fillStyle = isCollision ? "#fda4af" : isMe ? "#fef08a" : "#e2e8f0";
     ctx2d.textAlign = "center";
     ctx2d.textBaseline = "middle";
     ctx2d.fillText(wordTag, 0, 1);
@@ -2258,7 +2304,7 @@ function ensurePersistentOceanRunning() {
     }
 
     // Jarum Penunjuk "YOU"
-    oCtx.fillStyle = "#fb7185";
+    oCtx.fillStyle = "#facc15";
     oCtx.beginPath();
     oCtx.moveTo(rulerX - 14, anchorY);
     oCtx.lineTo(rulerX - 2, anchorY - 4);
@@ -2269,7 +2315,7 @@ function ensurePersistentOceanRunning() {
     oCtx.fillText("YOU", rulerX - 17, anchorY + 3);
     oCtx.restore();
 
-    // 8. Render Udang / Krill Pemain (Saat Menyelam MAUPUN Saat Mengambang Membaca Soal!)
+    // 8. Render Kapal Selam PALUNG.IO Pemain (Saat Menyelam MAUPUN Saat Mengambang Membaca Soal!)
     if (oceanWorld.diveActive) {
       const count = oceanWorld.diveResults.length || 1;
       oceanWorld.diveResults.forEach((r, idx) => {
@@ -2282,19 +2328,21 @@ function ensurePersistentOceanRunning() {
           const wordTag = r.answered
             ? `"${r.canonicalName.toUpperCase()}" ${r.isCollision ? "💥" : "▼"}`
             : "0m";
-          drawGlowingKrill(
+          drawPalungSubmarine(
             oCtx,
             laneX,
             dy,
             now,
-            isMe ? 1.18 : 0.85,
+            isMe ? 1.15 : 0.85,
             isMe,
             r.playerColor,
             r.playerAvatar,
             `${r.playerName.slice(0, 8)} +${Math.round((r.depthGained || 0) * diveProgress)}m`,
             isMe || diveProgress > 0.35 ? wordTag : null,
             r.isCollision,
-            r.isSoleExplorer
+            r.isSoleExplorer,
+            camD,
+            true
           );
         }
       });
@@ -2313,19 +2361,21 @@ function ensurePersistentOceanRunning() {
           : anchorY + (pDepth - camD) * pxPerMeter + Math.sin(now * 0.002 + idx) * 4;
         if (py > 60 && py < H - 65) {
           oCtx.save();
-          if (!isMe) oCtx.globalAlpha = 0.62;
-          drawGlowingKrill(
+          if (!isMe) oCtx.globalAlpha = 0.65;
+          drawPalungSubmarine(
             oCtx,
             laneX,
             py,
             now,
-            isMe ? 1.05 : 0.72,
+            isMe ? 1.05 : 0.74,
             isMe,
             p.color,
             p.avatar,
             isMe ? null : `${p.name.slice(0, 7)} (${pDepth}m)`,
             null,
             false,
+            false,
+            camD,
             false
           );
           oCtx.restore();
