@@ -530,8 +530,23 @@ btnTogglePhone.addEventListener("click", () => {
   );
 });
 
+function isActiveMultiplayerMatch() {
+  return Boolean(
+    currentRoom &&
+      !isLocalOfflineGame &&
+      (currentRoom.state === "PLAYING" || currentRoom.state === "REVEAL") &&
+      currentRoom.players &&
+      currentRoom.players.filter((p) => !p.isBot).length > 1
+  );
+}
+
 document.querySelectorAll(".mnav-item").forEach((btn) => {
   btn.addEventListener("click", () => {
+    if (isActiveMultiplayerMatch()) {
+      playErrorBuzz();
+      showToast("⚠️ Tidak bisa keluar atau buka menu lain saat pertandingan berlangsung!");
+      return;
+    }
     const action = btn.dataset.action;
     triggerHaptic(25);
     if (action === "home") {
@@ -1175,7 +1190,12 @@ if (socket) {
         isLocalOfflineGame = false;
         showToast("🔄 Tersambung kembali ke permainan!");
         if (res.room.state === "PLAYING" && res.roundData) {
-          startRoundScreen(res.roundData);
+          handleRoundStartUI(res.roundData);
+          if (res.roundData.alreadySubmitted) {
+            lockAnswerUI("Terkirim", "Menunggu", 0);
+          }
+        } else if (res.room.state === "REVEAL") {
+          showScreen("reveal");
         } else if (res.room.state === "LOBBY") {
           renderLobby(currentRoom);
           showScreen("lobby");
@@ -1345,7 +1365,7 @@ document.getElementById("btn-quick-match").addEventListener("click", () => {
   }
 
   isLocalOfflineGame = false;
-  socket.emit("room:quickmatch", { name, avatar, theme: "all" }, (res) => {
+  socket.emit("room:quickmatch", { name, avatar, theme: "all", clientId: getClientId() }, (res) => {
     if (res && res.success) {
       currentRoom = res.room;
       renderLobby(currentRoom);
@@ -1436,6 +1456,11 @@ window.joinRoomByCode = function (code) {
 
 // Kembali ke Beranda
 document.getElementById("btn-home-logo").addEventListener("click", () => {
+  if (isActiveMultiplayerMatch()) {
+    playErrorBuzz();
+    showToast("⚠️ Tidak bisa keluar saat pertandingan multiplayer sedang berlangsung!");
+    return;
+  }
   if (currentRoom && !isLocalOfflineGame && socket) {
     socket.emit("room:leave");
   }

@@ -690,11 +690,11 @@ function endRoundAndReveal(room) {
 
   const currentCat = room.selectedCategories[room.currentRound - 1];
 
-  // Jika ada pemain manusia yang AFK / terputus dan belum mengirim jawaban,
+  // Jika ada pemain manusia yang OFFLINE/TERPUTUS (bukan yang masih online) dan belum mengirim jawaban,
   // Bot otomatis menggantikan dengan jawaban umum/biasa (skor <= 45, bukan super langka).
   if (currentCat) {
     room.players.forEach((p) => {
-      if (!p.isBot && !room.roundSubmissions[p.id]) {
+      if (!p.isBot && p.disconnected && !room.roundSubmissions[p.id]) {
         const afkMatch = pickBotAnswer({ style: "safe" }, currentCat, true);
         if (afkMatch) {
           room.roundSubmissions[p.id] = {
@@ -1162,7 +1162,7 @@ io.on("connection", (socket) => {
   });
 
   // 2. Gabung Room dengan Kode 4 Huruf
-  socket.on("room:join", ({ code, name, avatar }, callback) => {
+  socket.on("room:join", ({ code, name, avatar, clientId }, callback) => {
     const cleanCode = (code || "").toString().trim().toUpperCase();
     const room = rooms.get(cleanCode);
     if (!room) {
@@ -1179,6 +1179,8 @@ io.on("connection", (socket) => {
       avatar: avatar || "🤿",
       isBot: false
     });
+    const joinedPlayer = room.players.find((p) => p.id === socket.id);
+    if (joinedPlayer && clientId) joinedPlayer.clientId = clientId;
     currentRoomCode = room.code;
     socket.join(room.code);
     broadcastRoomUpdate(room);
@@ -1189,7 +1191,7 @@ io.on("connection", (socket) => {
   });
 
   // 3. Quick Match (Langsung Masuk Arena Multiplayer + Bot Pintar)
-  socket.on("room:quickmatch", ({ name, avatar, theme }, callback) => {
+  socket.on("room:quickmatch", ({ name, avatar, theme, clientId }, callback) => {
     leaveCurrentRoom();
 
     // Cari room publik yang masih di LOBBY, jika tidak ada buat room baru dengan 3 AI Bot
@@ -1216,6 +1218,7 @@ io.on("connection", (socket) => {
           gameMode: "competitive"
         }
       });
+      if (targetRoom.players[0] && clientId) targetRoom.players[0].clientId = clientId;
       // Tambahkan 3 AI Bot Penyelam dengan kepribadian berbeda agar langsung seru!
       BOT_PROFILES.slice(0, 3).forEach((bp) => {
         addPlayerToRoom(targetRoom, {
@@ -1233,6 +1236,8 @@ io.on("connection", (socket) => {
         avatar: avatar || "🤿",
         isBot: false
       });
+      const joinedQuick = targetRoom.players.find((p) => p.id === socket.id);
+      if (joinedQuick && clientId) joinedQuick.clientId = clientId;
     }
 
     currentRoomCode = targetRoom.code;
