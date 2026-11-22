@@ -119,14 +119,27 @@
       <!-- ==================== LAYAR 1: BERANDA (HOME HUB) ==================== -->
       <section id="screen-home" class="screen active">
         <div class="hero-banner">
-          <div class="hero-badge">🌊 EDISI MOBILE & MULTIPLAYER • BISA ONLINE MAUPUN OFFLINE</div>
+          <div class="hero-badge">🌊 Trivia kelangkaan khas Indonesia</div>
           <h1 class="hero-title">Semakin <span class="text-gradient-gold">Langka</span> Jawabanmu,<br/>Semakin <span class="text-gradient-cyan">Dalam</span> Kapal Selammu!</h1>
           <p class="hero-desc">
-            Pertanyaan terbuka dengan puluhan jawaban benar. Jawaban pasaran hanya menyelam dangkal di <strong>Zona Plankton</strong>, tapi jawaban anti-mainstream membawamu menembus <strong>Palung Mariana (7.000m)</strong> sambil membuka fakta sains & budaya unik!
+            Sebutkan jawaban untuk pertanyaan terbuka. <strong>Makin langka jawabanmu, makin dalam kapal selammu</strong> sampai Palung Mariana (7.000m)!
           </p>
 
+          <div class="hero-cta">
+            <button type="button" class="btn-hero-play" id="btn-hero-play">⚡ MAIN SEKARANG</button>
+            <small>Langsung masuk arena, tanpa daftar.</small>
+          </div>
+
           <!-- Bar Indikator Tier Kelangkaan -->
-          <div class="tier-showcase">
+          <details class="howto">
+            <summary>❓ Cara main &amp; tingkat kelangkaan</summary>
+            <ol class="howto-steps">
+              <li>Baca pertanyaan, lalu ketik satu jawaban sebelum waktu habis.</li>
+              <li>Jawaban umum hanya dangkal; jawaban langka menyelam jauh.</li>
+              <li>Jawaban sama dengan pemain lain bertabrakan (&minus;50%).</li>
+              <li>Oksigen menipis kalau terus memilih jawaban umum.</li>
+            </ol>
+            <div class="tier-showcase">
             <div class="tier-chip tier-plankton">
               <span class="t-emoji">🟢</span>
               <div>
@@ -163,12 +176,14 @@
               </div>
             </div>
           </div>
+          </details>
         </div>
 
         <div class="home-grid">
           <!-- Kartu Profil Kapten Kapal Selam -->
           <div class="glass-card profile-card">
-            <h2 class="card-title">⚓ Identitas Penyelam</h2>
+            <details class="profile-details" id="profile-details">
+              <summary class="card-title">⚓ <span id="profile-summary-text">Identitas Penyelam</span> <small>ubah</small></summary>
             <div class="form-group">
               <label for="input-player-name">Nama Kapten</label>
               <input type="text" id="input-player-name" maxlength="20" placeholder="Ketik namamu..." value="Kapten Samudra" />
@@ -188,6 +203,8 @@
               </div>
             </div>
 
+            </details>
+
             <div class="stats-mini-box">
               <div>📚 <strong id="stat-total-categories">20</strong> Kategori Kurasi</div>
               <div>💎 <strong id="stat-total-answers">850+</strong> Fakta & Jawaban</div>
@@ -199,39 +216,16 @@
             <h2 class="card-title">🚀 Pilih Ekspedisi Penyelaman</h2>
 
             <div class="mode-actions">
+              <div class="mode-group-label">🌐 Main bareng</div>
               <!-- Mode 1: Quick Match Arena Multiplayer -->
               <button class="mode-btn mode-quick" id="btn-quick-match">
                 <div class="mode-icon">⚡</div>
                 <div class="mode-info">
                   <div class="mode-head">
-                    <strong>ARENA CEPAT (Multiplayer + AI Bot)</strong>
-                    <span class="badge-hot">PALING SERU</span>
+                    <strong>Arena Cepat</strong>
+                    <span class="badge-hot">POPULER</span>
                   </div>
-                  <p>Langsung terjun ke arena bersama pemain lain & Bot Penyelam pintar. Jalan online maupun offline!</p>
-                </div>
-              </button>
-
-              <!-- Mode 2: Tantangan Harian Global -->
-              <button class="mode-btn mode-daily" id="btn-daily-challenge">
-                <div class="mode-icon">🏆</div>
-                <div class="mode-info">
-                  <div class="mode-head">
-                    <strong>TANTANGAN HARIAN (Daily Dive)</strong>
-                    <span class="badge-daily" id="badge-today-date">Hari Ini</span>
-                  </div>
-                  <p>7 kategori tersinkronisasi hari ini untuk semua pemain. Raih rekor & bagikan Kartu Selammu!</p>
-                </div>
-              </button>
-
-              <!-- Mode 3: Mode Offline Mandiri (100% On-Device Tanpa Sinyal) -->
-              <button class="mode-btn mode-offline" id="btn-offline-solo">
-                <div class="mode-icon">📱</div>
-                <div class="mode-info">
-                  <div class="mode-head">
-                    <strong>MODE MANDIRI HP (Offline vs 3 AI Bot)</strong>
-                    <span class="badge-offline">TANPA KUOTA</span>
-                  </div>
-                  <p>Berjalan 100% di dalam HP tanpa perlu koneksi server. Cocok saat di perjalanan atau latihan!</p>
+                  <p>Langsung main bareng pemain lain dan bot. Online maupun offline.</p>
                 </div>
               </button>
 
@@ -253,6 +247,31 @@
                   </div>
                 </div>
               </div>
+
+              <div class="mode-group-label">🎯 Main sendiri</div>
+              <!-- Mode 2: Tantangan Harian Global -->
+              <button class="mode-btn mode-daily" id="btn-daily-challenge">
+                <div class="mode-icon">🏆</div>
+                <div class="mode-info">
+                  <div class="mode-head">
+                    <strong>Tantangan Harian</strong>
+                    <span class="badge-daily" id="badge-today-date">Hari Ini</span>
+                  </div>
+                  <p>7 kategori yang sama untuk semua pemain hari ini. Raih rekor dan bagikan hasilmu!</p>
+                </div>
+              </button>
+
+              <!-- Mode 3: Mode Offline Mandiri (100% On-Device Tanpa Sinyal) -->
+              <button class="mode-btn mode-offline" id="btn-offline-solo">
+                <div class="mode-icon">📱</div>
+                <div class="mode-info">
+                  <div class="mode-head">
+                    <strong>Mode Mandiri</strong>
+                    <span class="badge-offline">OFFLINE</span>
+                  </div>
+                  <p>Main sendiri melawan 3 bot, tanpa internet. Cocok untuk latihan.</p>
+                </div>
+              </button>
             </div>
           </div>
 
@@ -773,5 +792,6 @@ Anoa | 65 | Kerbau kerdil endemik hutan Sulawesi"></textarea>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
 <script src="/progress.js"></script>
+<script src="/home-ux.js"></script>
 </body>
 </html>

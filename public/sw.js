@@ -1,4 +1,4 @@
-const CACHE_NAME = "palung-io-mobile-v5";
+const CACHE_NAME = "palung-io-mobile-v6";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
   "/categories-bundle.js",
   "/app.js",
   "/progress.js",
+  "/home-ux.js",
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

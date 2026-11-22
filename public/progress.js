@@ -149,7 +149,7 @@
   function ensureCard() {
     let card = document.getElementById("progress-card");
     if (card) return card;
-    const anchor = document.querySelector("#screen-home .tier-showcase");
+    const anchor = document.querySelector("#screen-home .hero-cta");
     if (!anchor) return null;
     card = document.createElement("div");
     card.id = "progress-card";
@@ -177,16 +177,18 @@
       })
       .join("");
 
+    const wasOpen = card.querySelector("details") ? card.querySelector("details").open : false;
+    const doneCount = data.day.done.length;
     card.innerHTML = `
+      <details class="pc-details"${wasOpen ? " open" : ""}>
+      <summary class="pc-summary"><span class="pc-emoji">${rank.emoji}</span><span class="pc-sum-text"><strong>${rank.title}</strong><small>${data.xp} XP • Misi harian ${doneCount}/3</small></span><span class="pc-chevron">▾</span></summary>
       <div class="pc-head">
-        <div class="pc-rank"><span class="pc-emoji">${rank.emoji}</span>
-          <div><strong>${rank.title}</strong><small>${data.xp} XP • ${data.games} game • rekor ${data.bestDepth.toLocaleString("id-ID")}m</small></div>
-        </div>
-        <small class="pc-next">${next ? `Berikutnya: ${next.emoji} ${next.title}` : "Pangkat tertinggi!"}</small>
+        <small class="pc-next">${data.games} game • rekor ${data.bestDepth.toLocaleString("id-ID")}m • ${next ? `Berikutnya: ${next.emoji} ${next.title}` : "Pangkat tertinggi!"}</small>
       </div>
       <div class="pc-track"><div class="pc-bar" style="width:${pct}%"></div></div>
       <div class="pc-missions-title">Misi Harian</div>
-      <ul class="pc-missions">${rows}</ul>`;
+      <ul class="pc-missions">${rows}</ul>
+      </details>`;
   }
 
   // Bungkus handleGameOverUI (fungsi global dari app.js)

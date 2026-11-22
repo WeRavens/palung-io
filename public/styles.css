@@ -3309,3 +3309,36 @@ body.in-gameplay .phone-frame-wrapper.simulated-phone .ocean-stage-container {
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
 }
+
+/* ==================== UX BERANDA ==================== */
+.hero-cta { margin: 0.4rem auto 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+.btn-hero-play { width: min(420px, 100%); padding: 1rem 1.5rem; border: none; border-radius: 16px; font-family: var(--font-heading); font-weight: 900; font-size: 1.2rem; letter-spacing: 0.04em; color: #022c22; background: linear-gradient(135deg, #34d399 0%, #38bdf8 100%); box-shadow: 0 10px 28px rgba(16, 185, 129, 0.35); cursor: pointer; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.btn-hero-play:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(56, 189, 248, 0.4); }
+.btn-hero-play:active { transform: translateY(0); }
+.hero-cta small { color: var(--text-muted); font-size: 0.78rem; }
+.hero-desc { font-size: 0.95rem; max-width: 560px; margin-bottom: 1rem; }
+
+.howto { max-width: 720px; margin: 0.8rem auto 0; text-align: left; }
+.howto > summary, .pc-summary, .profile-details > summary { cursor: pointer; list-style: none; }
+.howto > summary::-webkit-details-marker, .pc-summary::-webkit-details-marker, .profile-details > summary::-webkit-details-marker { display: none; }
+.howto > summary { text-align: center; color: #7dd3fc; font-weight: 700; font-size: 0.85rem; padding: 0.4rem; }
+.howto-steps { margin: 0.5rem 0 0.9rem 1.2rem; color: #cbd5e1; font-size: 0.86rem; line-height: 1.6; }
+
+.progress-card { margin: 0.6rem auto 0; }
+.pc-summary { display: flex; align-items: center; gap: 0.7rem; }
+.pc-sum-text { flex: 1; display: flex; flex-direction: column; }
+.pc-sum-text strong { font-size: 0.95rem; }
+.pc-sum-text small { color: var(--text-muted); font-size: 0.74rem; }
+.pc-chevron { color: #7dd3fc; transition: transform 0.2s ease; }
+.pc-details[open] .pc-chevron { transform: rotate(180deg); }
+.pc-details[open] .pc-summary { margin-bottom: 0.6rem; }
+
+.profile-details > summary { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0; }
+.profile-details > summary small { margin-left: auto; color: #7dd3fc; font-size: 0.72rem; font-weight: 700; }
+.profile-details[open] > summary { margin-bottom: 0.9rem; }
+
+.mode-group-label { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #7dd3fc; margin: 0.3rem 0 -0.3rem; }
+.badge-hot, .badge-daily, .badge-offline { white-space: nowrap; flex-shrink: 0; }
+.mode-info strong { font-size: 1.02rem; }
+.join-input-row input { min-width: 0; }
+#input-room-code { min-width: 5.5em; text-align: center; letter-spacing: 0.15em; }
