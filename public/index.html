@@ -375,192 +375,162 @@
         </div>
       </section>
 
-      <!-- ==================== LAYAR 3: ARENA PERMAINAN & REVEAL ==================== -->
-      <section id="screen-game" class="screen">
-        <!-- Radar Bar Ringkas Khusus Layar HP (Agar Pertanyaan & Input Tetap di Atas Saat Keyboard Muncul) -->
-        <div class="mobile-compact-radar glass-card" id="mobile-compact-radar">
-          <div class="mcr-top">
-            <span class="round-pill" id="mobile-round-pill">Ronde 1/7</span>
-            <span class="mcr-depth" id="mobile-my-depth">⚓ 0m</span>
+      <!-- ==================== LAYAR 3: ARENA PERMAINAN (CONTINUOUS FULL-SCREEN OCEAN) ==================== -->
+      <section id="screen-game" class="screen ocean-screen">
+        <div class="ocean-stage-container" id="ocean-stage-container">
+          <!-- Kanvas Lautan Berkesinambungan (Selalu Aktif dari Ronde 1 s/d 7) -->
+          <canvas id="persistent-ocean-canvas"></canvas>
+
+          <!-- Overlay HUD Atas Minimalis (DEPTH | 7 KOTAK RONDE | OKSIGEN & KRU) -->
+          <div class="ocean-hud-top">
+            <div class="ohud-box ohud-depth">
+              <span class="ohud-label">KEDALAMAN</span>
+              <strong class="ohud-value" id="hud-my-depth">0m</strong>
+            </div>
+
+            <div class="ohud-center">
+              <div class="ohud-pips" id="hud-progress-pips">
+                <span class="pip active"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+                <span class="pip"></span>
+              </div>
+              <span class="ohud-round-text" id="game-round-indicator">RONDE 1 DARI 7</span>
+            </div>
+
+            <div class="ohud-right-group">
+              <div class="ohud-box ohud-score">
+                <span class="ohud-label">OKSIGEN</span>
+                <strong class="ohud-value" id="hud-my-oxygen">100%</strong>
+              </div>
+              <button type="button" class="ohud-crew-btn" id="btn-toggle-crew-drawer" title="Lihat Peringkat Kru">
+                👥 <span id="hud-crew-count">4</span>
+              </button>
+            </div>
           </div>
-          <div class="mcr-subs" id="mobile-subs-strip"></div>
-        </div>
 
-        <div class="game-layout">
-          <!-- Kolom Kiri: Visualisasi Palung Laut & Kapal Selam Live -->
-          <aside class="trench-sidebar glass-card">
-            <div class="trench-header">
-              <div>
-                <span class="trench-label">PETA KEDALAMAN LIVE</span>
-                <h3 id="trench-room-title">Palung Mariana (7.000m)</h3>
-              </div>
-              <span class="round-pill" id="game-round-indicator">Ronde 1/7</span>
+          <!-- Drawer Mengambang Daftar Kru Multiplayer (Muncul saat tombol 👥 diklik) -->
+          <div id="crew-drawer-popover" class="crew-drawer-popover hidden">
+            <div class="crew-drawer-head">
+              <strong id="trench-room-title">Kru Penyelam</strong>
+              <button type="button" class="icon-btn" id="btn-close-crew-drawer" style="padding:0.15rem 0.45rem;">✕</button>
             </div>
-
-            <!-- Trek Visualisasi Kapal Selam Menyelam -->
-            <div class="trench-visualizer" id="trench-visualizer">
-              <div class="trench-zones-bg">
-                <div class="t-zone z-sunlight"><span>0m • Zona Matahari</span></div>
-                <div class="t-zone z-twilight"><span>1.500m • Zona Senja</span></div>
-                <div class="t-zone z-midnight"><span>3.500m • Zona Tengah Malam</span></div>
-                <div class="t-zone z-abyss"><span>5.500m • Zona Abisal</span></div>
-                <div class="t-zone z-hadal"><span>7.000m • Dasar Palung!</span></div>
-              </div>
-              <div id="submarines-track" class="submarines-track"></div>
-            </div>
-
-            <!-- Daftar Peringkat Live Kru -->
             <div id="game-sidebar-players" class="sidebar-players-list"></div>
+          </div>
 
-            <!-- Bar Reaksi Gelembung Emoji -->
-            <div class="reaction-bar">
-              <span>Kirim Sinyal Sonar:</span>
-              <div class="reaction-btns">
-                <button class="react-btn" data-emoji="🧠" title="Mikir Keras!">🧠</button>
-                <button class="react-btn" data-emoji="😱" title="Susah!">😱</button>
-                <button class="react-btn" data-emoji="🔥" title="Dapat yang Langka!">🔥</button>
-                <button class="react-btn" data-emoji="💥" title="Awas Tabrakan!">💥</button>
-                <button class="react-btn" data-emoji="🐙" title="Salam Gurita!">🐙</button>
-              </div>
-            </div>
-          </aside>
-
-          <!-- Kolom Kanan: Area Kuis, Input Sonar, & Reveal Fakta -->
-          <div class="game-main-stage">
-            <!-- Header Status Ronde & Timer -->
-            <div class="stage-top-bar glass-card">
-              <div class="category-meta">
+          <!-- FASE 1: KARTU SOAL & INPUT DOCKED DI BAWAH (KARAKTER MENGAMBANG DI AIR) -->
+          <div id="phase-playing" class="ocean-playing-layer">
+            <div class="krillion-prompt-card">
+              <div class="kpc-meta">
                 <span class="theme-tag" id="game-category-theme">SAINS & ALAM</span>
-                <span class="answers-count-tag" id="game-category-count">📡 45+ Jawaban di Radar</span>
+                <span class="answers-count-tag" id="game-category-count">📡 45+ Jawaban</span>
               </div>
+              <h2 id="game-category-title" class="prompt-title">Sebutkan Negara di Benua Asia</h2>
+              <p id="game-category-hint" class="prompt-hint">Ada 48+ negara yang diakui di Asia!</p>
+              <div class="kpc-subline">▼ jawaban lebih langka menyelam lebih dalam ▼</div>
 
-              <div class="timer-box" id="timer-box">
-                <div class="timer-ring">
-                  <span id="game-timer-seconds">25</span>
+              <!-- HUD Oksigen & Sonar Ping Ringkas -->
+              <div id="oxygen-hud" class="oxygen-hud compact-oxygen hidden">
+                <div class="oxygen-mini-row">
+                  <div class="oxygen-track"><div id="oxygen-bar" class="oxygen-bar"></div></div>
+                  <span id="oxygen-value" class="oxygen-val-text">100%</span>
+                  <button type="button" class="btn-sonar-ping" id="btn-sonar-ping">
+                    📡 Sonar (−15 O₂ • <span id="sonar-ping-count">2</span>)
+                  </button>
                 </div>
-                <span class="timer-unit">detik</span>
+                <div id="sonar-ping-result" class="sonar-ping-result"></div>
               </div>
             </div>
 
-            <!-- Progress Bar Waktu -->
-            <div class="timer-progress-wrap">
-              <div id="game-timer-bar" class="timer-progress-bar"></div>
+            <!-- Panel Saat Jawaban Sudah Terkunci -->
+            <div id="locked-answer-panel" class="locked-panel ocean-locked hidden">
+              <div class="locked-badge">✅ TERKUNCI DI SONAR</div>
+              <div class="locked-answer-text" id="locked-answer-name">Kirgizstan</div>
+              <p class="locked-wait-text">Menunggu penyelam lain... Bersiap menukik!</p>
+              <button type="button" class="btn-reroll" id="btn-use-reroll">
+                🔄 Ganti Jawaban (Sisa: <span id="reroll-count">1</span>)
+              </button>
             </div>
 
-            <!-- AREA FASE 1: MENJAWAB PERTANYAAN -->
-            <div id="phase-playing" class="stage-card glass-card">
-              <div class="prompt-container">
-                <span class="prompt-kicker">MISI PENYELAMAN RONDE INI:</span>
-                <h2 id="game-category-title" class="prompt-title">Sebutkan Negara di Benua Asia</h2>
-                <p id="game-category-hint" class="prompt-hint">Ada 48+ negara yang diakui di Asia, dari Asia Tenggara hingga Asia Tengah!</p>
-              </div>
-
-              <!-- Form Input Jawaban -->
-              <form id="form-answer" class="answer-form" autocomplete="off">
-                <div class="input-sonar-wrapper" id="input-sonar-wrapper">
-                  <span class="sonar-icon">📡</span>
+            <!-- Dock Input Bawah (Timer Bulat + Input + SELAM!) -->
+            <div class="ocean-dock-bottom">
+              <div id="sonar-feedback" class="sonar-feedback"></div>
+              <form id="form-answer" class="ocean-answer-form" autocomplete="off">
+                <div class="timer-box ocean-timer" id="timer-box">
+                  <div class="timer-ring">
+                    <span id="game-timer-seconds">25</span>
+                  </div>
+                </div>
+                <div class="input-sonar-wrapper ocean-input-wrap" id="input-sonar-wrapper">
                   <input
                     type="text"
                     id="input-answer"
                     enterkeyhint="send"
                     autocapitalize="words"
                     autocorrect="off"
-                    placeholder="Ketik jawaban paling langka..."
+                    placeholder="Ketik satu jawaban langka..."
                     autocomplete="off"
                   />
                   <button type="submit" class="btn-submit-dive" id="btn-submit-answer">
-                    SELAM! ⚓
+                    SELAM!
                   </button>
                 </div>
               </form>
-
-              <!-- Pesan Umpan Balik Sonar (Valid / Tidak Valid) -->
-              <div id="sonar-feedback" class="sonar-feedback"></div>
-
-              <!-- HUD Oksigen & Sonar Ping (khas PALUNG.IO, mode online) -->
-              <div id="oxygen-hud" class="oxygen-hud hidden">
-                <div class="oxygen-label">
-                  <span>🫧 Oksigen</span>
-                  <span id="oxygen-value">100%</span>
-                </div>
-                <div class="oxygen-track"><div id="oxygen-bar" class="oxygen-bar"></div></div>
-                <button type="button" class="btn-sonar-ping" id="btn-sonar-ping">
-                  📡 Sonar Ping (−15 O₂ • Sisa: <span id="sonar-ping-count">2</span>)
-                </button>
-                <div id="sonar-ping-result" class="sonar-ping-result"></div>
-                <small class="oxygen-tip">Jawaban umum menguras oksigen, jawaban langka mengisinya. Oksigen habis = hasil selam −30%.</small>
+              <div class="timer-progress-wrap ocean-timer-bar">
+                <div id="game-timer-bar" class="timer-progress-bar"></div>
               </div>
-
-              <!-- Panel Saat Jawaban Sudah Terkunci -->
-              <div id="locked-answer-panel" class="locked-panel hidden">
-                <div class="locked-badge">✅ JAWABAN TERKUNCI DI SONAR</div>
-                <div class="locked-answer-text" id="locked-answer-name">Kirgizstan</div>
-                <p class="locked-wait-text">Menunggu penyelam lain mengunci jawaban...</p>
-                <button type="button" class="btn-reroll" id="btn-use-reroll">
-                  🔄 Gunakan Sonar Cadangan (Ganti Jawaban • Sisa: <span id="reroll-count">1</span>)
-                </button>
+              <div class="ocean-react-strip">
+                <button type="button" class="react-btn" data-emoji="🧠">🧠</button>
+                <button type="button" class="react-btn" data-emoji="😱">😱</button>
+                <button type="button" class="react-btn" data-emoji="🔥">🔥</button>
+                <button type="button" class="react-btn" data-emoji="💥">💥</button>
+                <button type="button" class="react-btn" data-emoji="🐙">🐙</button>
               </div>
+            </div>
+          </div>
 
-              <!-- Bar Reaksi Cepat Khusus Mobile (Satu Jempol di Bawah Input) -->
-              <div class="mobile-quick-reactions">
-                <span>Sinyal Sonar:</span>
-                <div class="reaction-btns">
-                  <button type="button" class="react-btn" data-emoji="🧠">🧠</button>
-                  <button type="button" class="react-btn" data-emoji="😱">😱</button>
-                  <button type="button" class="react-btn" data-emoji="🔥">🔥</button>
-                  <button type="button" class="react-btn" data-emoji="💥">💥</button>
-                  <button type="button" class="react-btn" data-emoji="🐙">🐙</button>
-                </div>
+          <!-- FASE 1.5: HUD DESCEND MELAYANG DI ATAS LAUTAN YANG SAMA (KARTU SOAL HILANG) -->
+          <div id="phase-descend" class="ocean-descend-overlay hidden">
+            <div class="descend-floating-banner">
+              <div class="descend-zone-badge" id="descend-zone-badge">☀️ ZONA MATAHARI</div>
+              <div class="descend-odometer" id="descend-depth-counter">+0m</div>
+              <div class="descend-answer-pill" id="descend-my-answer-pill">Menghitung sonar...</div>
+            </div>
+            <div class="descend-ambient-fact" id="descend-ambient-fact">
+              -- menukik menuju palung laut dalam... --
+            </div>
+            <button type="button" class="btn-small btn-skip-descend ocean-skip-btn" id="btn-skip-descend">
+              ⏩ Lihat Hasil
+            </button>
+          </div>
+
+          <!-- FASE 2: REVEAL HASIL RONDE & FAKTA EDUKASI (MENGAMBANG DI ATAS LAUT) -->
+          <div id="phase-reveal" class="ocean-reveal-sheet hidden">
+            <div class="reveal-header">
+              <div>
+                <span class="reveal-kicker">HASIL PENYELAMAN RONDE <span id="reveal-round-num">1</span></span>
+                <h2 id="reveal-category-title">Sebutkan Negara di Benua Asia</h2>
+              </div>
+              <div class="next-round-countdown">
+                Ronde baru dalam <strong id="reveal-next-timer">10</strong>d
               </div>
             </div>
 
-            <!-- AREA FASE 1.5: ANIMASI GROUP DESCEND ALA KRILLION.IO -->
-            <div id="phase-descend" class="stage-card glass-card descend-stage-card hidden">
-              <div class="descend-hud-top">
-                <div class="descend-hud-left">
-                  <span class="descend-kicker">🌊 MENYELAM KE PALUNG...</span>
-                  <div class="descend-zone-badge" id="descend-zone-badge">☀️ ZONA MATAHARI</div>
-                </div>
-                <div class="descend-hud-center">
-                  <div class="descend-odometer" id="descend-depth-counter">+0m</div>
-                  <div class="descend-answer-pill" id="descend-my-answer-pill">Menghitung sonar...</div>
-                </div>
-                <button type="button" class="btn-small btn-skip-descend" id="btn-skip-descend" title="Langsung lihat hasil ronde">
-                  ⏩ Lewati
-                </button>
-              </div>
-              <div class="descend-canvas-wrap">
-                <canvas id="descend-canvas"></canvas>
-              </div>
-            </div>
+            <div id="reveal-results-list" class="reveal-results-list"></div>
 
-            <!-- AREA FASE 2: REVEAL HASIL RONDE & FAKTA EDUKASI -->
-            <div id="phase-reveal" class="stage-card glass-card hidden">
-              <div class="reveal-header">
-                <div>
-                  <span class="reveal-kicker">HASIL PENYELAMAN RONDE <span id="reveal-round-num">1</span></span>
-                  <h2 id="reveal-category-title">Sebutkan Negara di Benua Asia</h2>
-                </div>
-                <div class="next-round-countdown">
-                  Ronde berikutnya dalam <strong id="reveal-next-timer">10</strong>d
-                </div>
+            <div class="educational-spotlight-grid">
+              <div class="fact-box spotlight-fact" id="reveal-spotlight-box">
+                <div class="fact-badge">💡 FAKTA TEMUAN TERLANGKA RONDE INI</div>
+                <h4 id="spotlight-answer-title">Bhutan (+920m)</h4>
+                <p id="spotlight-answer-fact">Satu-satunya negara karbon-negatif di dunia.</p>
               </div>
 
-              <!-- Daftar Jawaban Semua Pemain di Ronde Ini -->
-              <div id="reveal-results-list" class="reveal-results-list"></div>
-
-              <!-- Kotak Wawasan & Fakta Edukatif Palung -->
-              <div class="educational-spotlight-grid">
-                <div class="fact-box spotlight-fact" id="reveal-spotlight-box">
-                  <div class="fact-badge">💡 FAKTA TEMUAN TERLANGKA RONDE INI</div>
-                  <h4 id="spotlight-answer-title">Bhutan (+920m)</h4>
-                  <p id="spotlight-answer-fact">Satu-satunya negara karbon-negatif di dunia dan mengukur kemajuan dengan Kebahagiaan Nasional Bruto.</p>
-                </div>
-
-                <div class="fact-box legendary-vault">
-                  <div class="fact-badge">🟡 CONTOH JAWABAN "LEGENDA PALUNG" DI KATEGORI INI</div>
-                  <div id="reveal-legendary-list" class="legendary-mini-list"></div>
-                </div>
+              <div class="fact-box legendary-vault">
+                <div class="fact-badge">🟡 CONTOH JAWABAN "LEGENDA PALUNG"</div>
+                <div id="reveal-legendary-list" class="legendary-mini-list"></div>
               </div>
             </div>
           </div>

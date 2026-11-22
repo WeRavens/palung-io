@@ -1501,77 +1501,103 @@ function updateAmbientDepthZone(depthMeters) {
   ambientZoneText.textContent = `${zoneName} (${formatMeters(depthMeters)})`;
 }
 
-function renderSubmarineTrench(room) {
-  const track = document.getElementById("submarines-track");
-  const maxScaleDepth = (room.roundsTotal || 7) * 1000;
-  const count = room.players.length || 1;
+function updateCrewDrawerAndHud(room) {
   const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
-
-  track.innerHTML = room.players
-    .map((p, idx) => {
-      const pctDepth = Math.min(96, Math.max(4, (p.totalDepth / maxScaleDepth) * 94));
-      const leftPct = count === 1 ? 50 : 14 + (idx / (count - 1)) * 72;
-      return `
-        <div class="sub-marker ${p.readyInRound ? "ready" : ""}" style="top: ${pctDepth}%; left: ${leftPct}%;">
-          <div class="sub-bubble-icon" style="border-color: ${p.readyInRound ? "#10b981" : p.color}">
-            ${p.avatar}
-          </div>
-          <span class="sub-name-tag">${escapeHtml(p.name.slice(0, 10))} • ${formatMeters(p.totalDepth)}</span>
-        </div>
-      `;
-    })
-    .join("");
-
   const sorted = [...room.players].sort((a, b) => b.totalDepth - a.totalDepth);
-  const sideList = document.getElementById("game-sidebar-players");
-  sideList.innerHTML = sorted
-    .map(
-      (p, i) => `
-      <div class="side-player-row ${p.readyInRound ? "is-ready" : ""}">
-        <div class="sp-left">
-          <strong style="color:#94a3b8;width:18px;">#${i + 1}</strong>
-          <span>${p.avatar}</span>
-          <span>${escapeHtml(p.name)}</span>
-          <span>${p.readyInRound ? "✅" : "💭"}</span>
-        </div>
-        <span class="sp-depth">${formatMeters(p.totalDepth)}</span>
-      </div>
-    `
-    )
-    .join("");
 
-  // Update Compact Mobile Radar Strip (Untuk Tampilan HP Portrait)
-  document.getElementById("mobile-round-pill").textContent = `Ronde ${room.currentRound}/${room.roundsTotal}`;
+  const sideList = document.getElementById("game-sidebar-players");
+  if (sideList) {
+    sideList.innerHTML = sorted
+      .map(
+        (p, i) => `
+        <div class="side-player-row ${p.readyInRound ? "is-ready" : ""}">
+          <div class="sp-left">
+            <strong style="color:#94a3b8;width:18px;">#${i + 1}</strong>
+            <span>${p.avatar}</span>
+            <span>${escapeHtml(p.name)}</span>
+            <span>${p.readyInRound ? "✅" : "💭"}</span>
+          </div>
+          <span class="sp-depth">${formatMeters(p.totalDepth)}</span>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  const crewCountEl = document.getElementById("hud-crew-count");
+  if (crewCountEl) crewCountEl.textContent = room.players.length;
+
   const myPlayer = room.players.find((p) => p.id === myId) || room.players[0];
   if (myPlayer) {
     updateAmbientDepthZone(myPlayer.totalDepth);
-    document.getElementById("mobile-my-depth").textContent = `⚓ ${formatMeters(myPlayer.totalDepth)}`;
+    const hudDepth = document.getElementById("hud-my-depth");
+    if (hudDepth) hudDepth.textContent = formatMeters(myPlayer.totalDepth);
+
+    const hudOxy = document.getElementById("hud-my-oxygen");
+    if (hudOxy) {
+      hudOxy.textContent =
+        typeof myPlayer.oxygen === "number" ? `${myPlayer.oxygen}%` : `${myPlayer.historyTiers.length * 100}`;
+    }
+
+    if (typeof oceanWorld !== "undefined" && !oceanWorld.diveActive) {
+      oceanWorld.targetCameraDepth = myPlayer.totalDepth;
+    }
   }
 
-  const mobileStrip = document.getElementById("mobile-subs-strip");
-  mobileStrip.innerHTML = sorted
-    .map(
-      (p) => `
-      <div class="mcr-chip ${p.readyInRound ? "ready" : ""}">
-        <span>${p.avatar}</span>
-        <span>${escapeHtml(p.name.slice(0, 8))}</span>
-        <span style="color:#38bdf8">${formatMeters(p.totalDepth)}</span>
-        <span>${p.readyInRound ? "✅" : ""}</span>
-      </div>
-    `
-    )
-    .join("");
+  // Update 7 Kotak Progres Ronde di Tengah Atas HUD
+  const pipsWrap = document.getElementById("hud-progress-pips");
+  if (pipsWrap) {
+    const total = room.roundsTotal || 7;
+    const cur = room.currentRound || 1;
+    const tiers = (myPlayer && myPlayer.historyTiers) || [];
+    let html = "";
+    for (let i = 1; i <= total; i++) {
+      let cls = "pip";
+      const tEmoji = tiers[i - 1];
+      if (tEmoji === "🟡") cls += " done-legenda";
+      else if (tEmoji === "🟣") cls += " done-abisal";
+      else if (tEmoji === "🔵") cls += " done-karang";
+      else if (tEmoji === "🟢") cls += " done-plankton";
+      else if (tEmoji === "💥") cls += " done-collision";
+      else if (tEmoji === "⚫") cls += " done-missed";
+      else if (i === cur) cls += " active";
+      html += `<span class="${cls}"></span>`;
+    }
+    pipsWrap.innerHTML = html;
+  }
+}
+
+function renderSubmarineTrench(room) {
+  updateCrewDrawerAndHud(room);
+}
+
+// Toggle Popover Daftar Kru
+const btnToggleCrew = document.getElementById("btn-toggle-crew-drawer");
+const crewDrawerPopover = document.getElementById("crew-drawer-popover");
+const btnCloseCrew = document.getElementById("btn-close-crew-drawer");
+if (btnToggleCrew && crewDrawerPopover) {
+  btnToggleCrew.addEventListener("click", () => {
+    crewDrawerPopover.classList.toggle("hidden");
+  });
+}
+if (btnCloseCrew && crewDrawerPopover) {
+  btnCloseCrew.addEventListener("click", () => {
+    crewDrawerPopover.classList.add("hidden");
+  });
 }
 
 function renderGameScreen(room) {
-  document.getElementById("game-round-indicator").textContent = `Ronde ${room.currentRound}/${room.roundsTotal}`;
-  document.getElementById("trench-room-title").textContent = room.isDaily
-    ? "Tantangan Harian (7.000m)"
-    : isLocalOfflineGame
-    ? "Mode Mandiri HP (Offline)"
-    : room.settings.gameMode === "coop"
-    ? "Ekspedisi Tim Co-op"
-    : `Arena Room ${room.code}`;
+  document.getElementById("game-round-indicator").textContent = `RONDE ${room.currentRound} DARI ${room.roundsTotal}`;
+  const roomTitleEl = document.getElementById("trench-room-title");
+  if (roomTitleEl) {
+    roomTitleEl.textContent = room.isDaily
+      ? "Tantangan Harian"
+      : isLocalOfflineGame
+      ? "Mode Mandiri HP"
+      : room.settings.gameMode === "coop"
+      ? "Tim Co-op"
+      : `Kru Room ${room.code}`;
+  }
 
   renderSubmarineTrench(room);
 
@@ -1584,7 +1610,7 @@ function renderGameScreen(room) {
     };
     document.getElementById("game-category-theme").textContent =
       themeLabels[room.category.theme] || "🌍 PENGETAHUAN";
-    document.getElementById("game-category-count").textContent = `📡 ${room.category.totalPossibleAnswers}+ Jawaban di Radar`;
+    document.getElementById("game-category-count").textContent = `📡 ${room.category.totalPossibleAnswers}+ Jawaban`;
     document.getElementById("game-category-title").textContent = room.category.title;
     document.getElementById("game-category-hint").textContent = room.category.hint;
   }
@@ -1595,6 +1621,15 @@ function handleRoundStartUI(payload) {
   setBgmMood("diving");
   triggerSonarRipple("rgba(56, 189, 248, 0.5)");
   playSonarPing(784, 0.2);
+
+  if (payload.round === 1 && typeof oceanWorld !== "undefined") {
+    oceanWorld.cameraDepth = 0;
+    oceanWorld.targetCameraDepth = 0;
+    oceanWorld.diveActive = false;
+  }
+  if (typeof ensurePersistentOceanRunning === "function") {
+    ensurePersistentOceanRunning();
+  }
 
   document.getElementById("phase-playing").classList.remove("hidden");
   document.getElementById("phase-descend").classList.add("hidden");
@@ -1759,39 +1794,91 @@ function unlockRerollUI() {
 }
 
 // ============================================================================
-// ANIMASI GROUP DESCEND ALA KRILLION.IO (PARALLAX LAUT DALAM + KAPAL SELAM)
+// CONTINUOUS PERSISTENT OCEAN WORLD (ALA KRILLION.IO — SELALU HIDUP DI LAYAR)
 // ============================================================================
-let descendRafId = null;
-let descendFinishCallback = null;
+const AMBIENT_OCEAN_FACTS = [
+  "-- cahaya matahari hanya mampu menembus hingga kedalaman ~200m --",
+  "-- ubur-ubur bioluminesensi bersinar alami di zona tengah malam --",
+  "-- paus sperma menyelam hingga 2.000m untuk berburu cumi-cumi raksasa --",
+  "-- tekanan di Palung Mariana setara dengan 50 pesawat jet menindihmu --",
+  "-- hampir 80% dasar samudra Bumi belum pernah dipetakan manusia --",
+  "-- lubang hidrotermal dasar laut memanaskan air hingga 400°C tanpa mendidih --",
+  "-- ikan raja laut Coelacanth hidup tenang di perairan dalam Sulawesi --"
+];
 
-function stopDescendAnimation() {
-  if (descendRafId) {
-    cancelAnimationFrame(descendRafId);
-    descendRafId = null;
-  }
-  descendFinishCallback = null;
-}
+const OCEAN_MILESTONES = [
+  { depth: 200, label: "🌊 BATAS ZONA SENJA · 200m", color: "#38bdf8" },
+  { depth: 500, label: "🔵 TERUMBU DALAM · 500m", color: "#38bdf8" },
+  { depth: 1000, label: "🌑 ZONA TENGAH MALAM · 1.000m", color: "#818cf8" },
+  { depth: 1500, label: "🦑 WILAYAH CUMI RAKSASA · 1.500m", color: "#c084fc" },
+  { depth: 2500, label: "🟣 ZONA ABISAL · 2.500m", color: "#c084fc" },
+  { depth: 4000, label: "🌋 VENTILASI HIDROTERMAL · 4.000m", color: "#f59e0b" },
+  { depth: 5500, label: "🟡 PALUNG HADAL · 5.500m", color: "#facc15" },
+  { depth: 7000, label: "🏆 DASAR PALUNG MARIANA · 7.000m", color: "#facc15" }
+];
 
-const btnSkipDescend = document.getElementById("btn-skip-descend");
-if (btnSkipDescend) {
-  btnSkipDescend.addEventListener("click", () => {
-    const cb = descendFinishCallback;
-    stopDescendAnimation();
-    if (typeof cb === "function") cb();
-  });
-}
+const oceanWorld = {
+  rafId: null,
+  cameraDepth: 0,
+  targetCameraDepth: 0,
+  diveActive: false,
+  diveStartTime: 0,
+  diveDurationMs: 4000,
+  diveFromDepth: 0,
+  diveToDepth: 0,
+  diveMaxPlayerDepth: 0,
+  diveResults: [],
+  diveMyId: "me",
+  diveOnDone: null,
+  diveFinishTimer: null,
+  lastTierSound: 0,
+  lastBubbleTime: 0,
+  creatures: Array.from({ length: 48 }, (_, i) => {
+    const bank = [
+      { minD: 20, maxD: 900, emoji: "🐠", size: 20, speed: 0.45 },
+      { minD: 50, maxD: 1200, emoji: "🐢", size: 24, speed: 0.35 },
+      { minD: 150, maxD: 1800, emoji: "🐬", size: 24, speed: 0.75 },
+      { minD: 400, maxD: 3200, emoji: "🪼", size: 24, speed: 0.2, glow: "#38bdf8" },
+      { minD: 800, maxD: 4500, emoji: "🦑", size: 24, speed: 0.5, glow: "#c084fc" },
+      { minD: 1200, maxD: 5800, emoji: "🦈", size: 28, speed: 0.85, glow: "#94a3b8" },
+      { minD: 2500, maxD: 7200, emoji: "🐡", size: 22, speed: 0.3, glow: "#facc15" },
+      { minD: 3800, maxD: 7400, emoji: "🐉", size: 26, speed: 0.55, glow: "#facc15" }
+    ];
+    const tpl = bank[i % bank.length];
+    return {
+      depth: tpl.minD + Math.random() * (tpl.maxD - tpl.minD),
+      xNorm: 0.1 + Math.random() * 0.78,
+      emoji: tpl.emoji,
+      size: tpl.size,
+      speed: tpl.speed * (Math.random() > 0.5 ? 1 : -1) * 0.0008,
+      glow: tpl.glow || null
+    };
+  }),
+  particles: Array.from({ length: 60 }, () => ({
+    xNorm: Math.random(),
+    yNorm: Math.random(),
+    r: 1 + Math.random() * 2.8,
+    speed: 0.001 + Math.random() * 0.0025,
+    alpha: 0.15 + Math.random() * 0.5
+  })),
+  kelps: Array.from({ length: 12 }, (_, i) => ({
+    xNorm: i < 6 ? 0.03 + i * 0.045 : 0.72 + (i - 6) * 0.045,
+    phase: Math.random() * Math.PI * 2,
+    heightFactor: 0.25 + Math.random() * 0.32
+  }))
+};
 
 function lerpNum(a, b, t) {
   return a + (b - a) * t;
 }
 
 function getOceanColorsAtDepth(depth) {
-  // Stops: 0m (Matahari) -> 350m (Karang) -> 650m (Abisal) -> 950m (Hadal)
   const stops = [
-    { d: 0, top: [2, 132, 199], bot: [3, 105, 161] },
-    { d: 350, top: [3, 105, 161], bot: [30, 58, 138] },
-    { d: 650, top: [30, 27, 75], bot: [15, 7, 40] },
-    { d: 950, top: [9, 3, 20], bot: [2, 1, 8] }
+    { d: 0, top: [7, 56, 108], bot: [4, 28, 62] },
+    { d: 800, top: [5, 38, 82], bot: [3, 18, 44] },
+    { d: 2200, top: [14, 20, 62], bot: [7, 8, 32] },
+    { d: 4500, top: [12, 8, 34], bot: [3, 2, 12] },
+    { d: 7000, top: [4, 2, 14], bot: [1, 1, 5] }
   ];
   let s0 = stops[0];
   let s1 = stops[stops.length - 1];
@@ -1802,20 +1889,12 @@ function getOceanColorsAtDepth(depth) {
       break;
     }
   }
-  if (depth >= s1.d) {
-    s0 = s1;
-  }
+  if (depth >= s1.d) s0 = s1;
   const span = Math.max(1, s1.d - s0.d);
   const t = Math.min(1, Math.max(0, (depth - s0.d) / span));
-  const rT = Math.round(lerpNum(s0.top[0], s1.top[0], t));
-  const gT = Math.round(lerpNum(s0.top[1], s1.top[1], t));
-  const bT = Math.round(lerpNum(s0.top[2], s1.top[2], t));
-  const rB = Math.round(lerpNum(s0.bot[0], s1.bot[0], t));
-  const gB = Math.round(lerpNum(s0.bot[1], s1.bot[1], t));
-  const bB = Math.round(lerpNum(s0.bot[2], s1.bot[2], t));
   return {
-    top: `rgb(${rT},${gT},${bT})`,
-    bot: `rgb(${rB},${gB},${bB})`
+    top: `rgb(${Math.round(lerpNum(s0.top[0], s1.top[0], t))},${Math.round(lerpNum(s0.top[1], s1.top[1], t))},${Math.round(lerpNum(s0.top[2], s1.top[2], t))})`,
+    bot: `rgb(${Math.round(lerpNum(s0.bot[0], s1.bot[0], t))},${Math.round(lerpNum(s0.bot[1], s1.bot[1], t))},${Math.round(lerpNum(s0.bot[2], s1.bot[2], t))})`
   };
 }
 
@@ -1826,348 +1905,486 @@ function getZoneLabelAtDepth(depth) {
   return { text: "🟢 ZONA PLANKTON", color: "#10b981" };
 }
 
-function playGroupDescendAnimation(payload, onDone) {
-  stopDescendAnimation();
-  const phaseDescend = document.getElementById("phase-descend");
-  const dCanvas = document.getElementById("descend-canvas");
-  if (!phaseDescend || !dCanvas) {
-    onDone();
-    return;
+// Gambar Udang/Krill Bioluminesensi Bercahaya (Ikonik ala Krillion.io!)
+function drawGlowingKrill(ctx2d, x, y, now, scale, isMe, color, avatar, labelText, wordTag, isCollision, isSole) {
+  ctx2d.save();
+  ctx2d.translate(x, y);
+  ctx2d.scale(scale, scale);
+
+  // Cahaya halo bawah laut
+  const glowColor = isCollision ? "rgba(244, 63, 94, 0.55)" : isMe ? "rgba(251, 113, 133, 0.45)" : "rgba(56, 189, 248, 0.25)";
+  const radGrad = ctx2d.createRadialGradient(0, 0, 2, 0, 0, isMe ? 36 : 26);
+  radGrad.addColorStop(0, glowColor);
+  radGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx2d.fillStyle = radGrad;
+  ctx2d.beginPath();
+  ctx2d.arc(0, 0, isMe ? 36 : 26, 0, Math.PI * 2);
+  ctx2d.fill();
+
+  if (isSole) {
+    ctx2d.beginPath();
+    ctx2d.arc(0, 0, 24 + Math.sin(now * 0.01) * 3, 0, Math.PI * 2);
+    ctx2d.strokeStyle = "rgba(250, 204, 21, 0.78)";
+    ctx2d.lineWidth = 2;
+    ctx2d.stroke();
   }
 
+  // Gambar Krill / Udang Bercahaya (Melengkung elegan)
+  const bodyColor = isMe ? "#fb7185" : color || "#38bdf8";
+  ctx2d.save();
+  ctx2d.rotate(Math.sin(now * 0.005) * 0.08);
+  ctx2d.strokeStyle = bodyColor;
+  ctx2d.fillStyle = bodyColor;
+  ctx2d.shadowColor = bodyColor;
+  ctx2d.shadowBlur = isMe ? 14 : 6;
+
+  // Segmen tubuh krill
+  const segs = [
+    { x: -2, y: -6, r: 5.2 },
+    { x: 3, y: -2, r: 4.8 },
+    { x: 4, y: 4, r: 4.0 },
+    { x: 0, y: 9, r: 3.1 },
+    { x: -6, y: 11, r: 2.3 }
+  ];
+  segs.forEach((s) => {
+    ctx2d.beginPath();
+    ctx2d.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx2d.fill();
+  });
+
+  // Antena panjang melengkung
+  ctx2d.lineWidth = 1.4;
+  ctx2d.beginPath();
+  ctx2d.moveTo(-4, -9);
+  ctx2d.quadraticCurveTo(-12, -18, -4, -22);
+  ctx2d.moveTo(-1, -10);
+  ctx2d.quadraticCurveTo(-5, -20, 4, -21);
+  ctx2d.stroke();
+
+  // Mata kecil bercahaya
+  ctx2d.fillStyle = "#ffffff";
+  ctx2d.beginPath();
+  ctx2d.arc(-4.5, -7, 1.5, 0, Math.PI * 2);
+  ctx2d.fill();
+  ctx2d.restore();
+
+  // Avatar maskot kecil di samping krill jika bukan default
+  if (avatar && avatar !== "🤿") {
+    ctx2d.font = "12px sans-serif";
+    ctx2d.textAlign = "left";
+    ctx2d.textBaseline = "middle";
+    ctx2d.fillText(avatar, 13, -6);
+  }
+
+  // Label nama di atas krill
+  if (labelText) {
+    ctx2d.font = "700 10px Outfit, sans-serif";
+    ctx2d.textAlign = "center";
+    ctx2d.fillStyle = isMe ? "#bae6fd" : "rgba(203, 213, 225, 0.78)";
+    ctx2d.fillText(labelText, 0, -27);
+  }
+
+  // Kartu Kata Jawaban (Saat Descend! ala "SARCOIDOSIS" ▼)
+  if (wordTag) {
+    ctx2d.font = "800 11px Outfit, monospace";
+    const tw = ctx2d.measureText(wordTag).width + 18;
+    ctx2d.save();
+    ctx2d.translate(0, 30);
+    ctx2d.rotate(isMe ? -0.025 : 0.015);
+    ctx2d.fillStyle = "rgba(4, 13, 28, 0.9)";
+    ctx2d.strokeStyle = isCollision ? "#f43f5e" : isMe ? "#fb7185" : "rgba(56, 189, 248, 0.5)";
+    ctx2d.lineWidth = 1.4;
+    ctx2d.beginPath();
+    ctx2d.roundRect(-tw / 2, -10, tw, 22, 6);
+    ctx2d.fill();
+    ctx2d.stroke();
+
+    ctx2d.fillStyle = isCollision ? "#fda4af" : isMe ? "#ff8fa3" : "#e2e8f0";
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "middle";
+    ctx2d.fillText(wordTag, 0, 1);
+    ctx2d.restore();
+  }
+
+  ctx2d.restore();
+}
+
+function stopDescendAnimation() {
+  if (oceanWorld.diveFinishTimer) {
+    clearTimeout(oceanWorld.diveFinishTimer);
+    oceanWorld.diveFinishTimer = null;
+  }
+  oceanWorld.diveActive = false;
+  oceanWorld.diveOnDone = null;
+}
+
+const btnSkipDescend = document.getElementById("btn-skip-descend");
+if (btnSkipDescend) {
+  btnSkipDescend.addEventListener("click", () => {
+    const cb = oceanWorld.diveOnDone;
+    oceanWorld.cameraDepth = oceanWorld.diveToDepth;
+    oceanWorld.targetCameraDepth = oceanWorld.diveToDepth;
+    stopDescendAnimation();
+    if (typeof cb === "function") cb();
+  });
+}
+
+function ensurePersistentOceanRunning() {
+  if (oceanWorld.rafId) return;
+
+  function tick(now) {
+    oceanWorld.rafId = requestAnimationFrame(tick);
+    if (!screens.game || !screens.game.classList.contains("active")) return;
+
+    const pCanvas = document.getElementById("persistent-ocean-canvas");
+    if (!pCanvas || !pCanvas.parentElement) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = pCanvas.parentElement.getBoundingClientRect();
+    const W = Math.max(300, Math.round(rect.width));
+    const H = Math.max(340, Math.round(rect.height));
+    if (pCanvas.width !== W * dpr || pCanvas.height !== H * dpr) {
+      pCanvas.width = W * dpr;
+      pCanvas.height = H * dpr;
+    }
+
+    const oCtx = pCanvas.getContext("2d");
+    oCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Hitung cameraDepth saat ini (baik saat mengambang maupun saat descend!)
+    let speedM = 0;
+    let diveProgress = 0;
+    if (oceanWorld.diveActive) {
+      const elapsed = now - oceanWorld.diveStartTime;
+      const rawP = Math.min(1, elapsed / oceanWorld.diveDurationMs);
+      diveProgress = 1 - Math.pow(1 - rawP, 3);
+      const nextCam = lerpNum(oceanWorld.diveFromDepth, oceanWorld.diveToDepth, diveProgress);
+      speedM = Math.max(0, nextCam - oceanWorld.cameraDepth);
+      oceanWorld.cameraDepth = nextCam;
+
+      // Update odometer HUD ronde ini
+      const myRes =
+        oceanWorld.diveResults.find((r) => r.playerId === oceanWorld.diveMyId) ||
+        oceanWorld.diveResults[0];
+      const myGainNow = Math.round((myRes ? myRes.depthGained : 0) * diveProgress);
+      const odoEl = document.getElementById("descend-depth-counter");
+      const zoneBadge = document.getElementById("descend-zone-badge");
+      const hudDepth = document.getElementById("hud-my-depth");
+      if (odoEl) odoEl.textContent = `+${formatMeters(myGainNow)}`;
+      if (hudDepth) hudDepth.textContent = formatMeters(Math.round(oceanWorld.diveFromDepth + myGainNow));
+      if (zoneBadge) {
+        const z = getZoneLabelAtDepth(myGainNow);
+        zoneBadge.textContent = z.text;
+        zoneBadge.style.borderColor = z.color;
+        zoneBadge.style.color = z.color;
+      }
+
+      if (now - oceanWorld.lastBubbleTime > 165 && speedM > 0.8) {
+        oceanWorld.lastBubbleTime = now;
+        playBubblePop(0.03);
+      }
+      if (myGainNow >= 890 && oceanWorld.lastTierSound < 3) {
+        oceanWorld.lastTierSound = 3;
+        playSonarPing(1046.5, 0.25);
+        triggerHaptic([40, 30, 80]);
+      } else if (myGainNow >= 650 && oceanWorld.lastTierSound < 2) {
+        oceanWorld.lastTierSound = 2;
+        playSonarPing(783.99, 0.2);
+        triggerHaptic(35);
+      } else if (myGainNow >= 350 && oceanWorld.lastTierSound < 1) {
+        oceanWorld.lastTierSound = 1;
+        playSonarPing(659.25, 0.16);
+      }
+
+      if (rawP >= 1 && !oceanWorld.diveFinishTimer) {
+        oceanWorld.diveFinishTimer = setTimeout(() => {
+          const cb = oceanWorld.diveOnDone;
+          oceanWorld.targetCameraDepth = oceanWorld.diveToDepth;
+          stopDescendAnimation();
+          if (typeof cb === "function") cb();
+        }, 520);
+      }
+    } else {
+      // Transisi halus saat diam/menunggu soal
+      oceanWorld.cameraDepth += (oceanWorld.targetCameraDepth - oceanWorld.cameraDepth) * 0.08;
+    }
+
+    const camD = oceanWorld.cameraDepth;
+    const pxPerMeter = 1.65;
+    const anchorY = oceanWorld.diveActive ? H * 0.48 : H * 0.68;
+
+    // 1. Gradasi Air Samudra Berkelanjutan
+    const cols = getOceanColorsAtDepth(camD);
+    const bgGrad = oCtx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, cols.top);
+    bgGrad.addColorStop(1, cols.bot);
+    oCtx.fillStyle = bgGrad;
+    oCtx.fillRect(0, 0, W, H);
+
+    // 2. Sinar Matahari Tipis dari Permukaan (memudar perlahan hingga 1.200m)
+    if (camD < 1200) {
+      const rayAlpha = Math.max(0, (1 - camD / 1200) * 0.16);
+      for (let i = 0; i < 4; i++) {
+        const rx = W * (0.14 + i * 0.23) + Math.sin(now * 0.0008 + i) * 16;
+        const rGrad = oCtx.createLinearGradient(rx, 0, rx + 35, H * 0.8);
+        rGrad.addColorStop(0, `rgba(186, 230, 253, ${rayAlpha})`);
+        rGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
+        oCtx.fillStyle = rGrad;
+        oCtx.beginPath();
+        oCtx.moveTo(rx - 18, 0);
+        oCtx.lineTo(rx + 22, 0);
+        oCtx.lineTo(rx + 85, H);
+        oCtx.lineTo(rx - 25, H);
+        oCtx.closePath();
+        oCtx.fill();
+      }
+    }
+
+    // 3. Siluet Kelp / Rumput Laut & Tebing Palung di Sisi Kiri-Kanan
+    oCtx.fillStyle = "rgba(2, 10, 22, 0.45)";
+    oceanWorld.kelps.forEach((k) => {
+      const kx = k.xNorm * W;
+      const sway = Math.sin(now * 0.0014 + k.phase) * 12;
+      const kelpH = H * k.heightFactor;
+      const baseScroll = (camD * 0.35) % (H * 0.5);
+      const baseY = H + 30 - baseScroll * 0.25;
+      oCtx.beginPath();
+      oCtx.moveTo(kx - 10, baseY);
+      oCtx.quadraticCurveTo(kx + sway, baseY - kelpH * 0.55, kx + sway * 0.6, baseY - kelpH);
+      oCtx.quadraticCurveTo(kx + 12 + sway * 0.4, baseY - kelpH * 0.45, kx + 10, baseY);
+      oCtx.closePath();
+      oCtx.fill();
+    });
+
+    // 4. Garis Horizontal Milestone Kedalaman (Putus-Putus ala Krillion!)
+    OCEAN_MILESTONES.forEach((ms) => {
+      const myY = anchorY + (ms.depth - camD) * pxPerMeter;
+      if (myY > 56 && myY < H - 30) {
+        oCtx.save();
+        oCtx.setLineDash([5, 5]);
+        oCtx.strokeStyle = ms.color + "55";
+        oCtx.lineWidth = 1;
+        oCtx.beginPath();
+        oCtx.moveTo(16, myY);
+        oCtx.lineTo(W - 62, myY);
+        oCtx.stroke();
+        oCtx.setLineDash([]);
+        oCtx.font = "700 10px Outfit, monospace";
+        oCtx.fillStyle = ms.color + "bb";
+        oCtx.textAlign = "right";
+        oCtx.fillText(ms.label, W - 66, myY - 5);
+        oCtx.restore();
+      }
+    });
+
+    // Garis posisi kedalaman pemain saat ini (Putus-putus putih terang saat descend)
+    if (oceanWorld.diveActive) {
+      oCtx.save();
+      oCtx.setLineDash([4, 4]);
+      oCtx.strokeStyle = "rgba(226, 232, 240, 0.38)";
+      oCtx.lineWidth = 1;
+      oCtx.beginPath();
+      oCtx.moveTo(12, anchorY);
+      oCtx.lineTo(W - 58, anchorY);
+      oCtx.stroke();
+      oCtx.restore();
+    }
+
+    // 5. Biota Laut Melintas di Air
+    oceanWorld.creatures.forEach((c) => {
+      c.xNorm += c.speed;
+      if (c.xNorm < 0.06) c.xNorm = 0.88;
+      if (c.xNorm > 0.88) c.xNorm = 0.06;
+      const cy = anchorY + (c.depth - camD) * pxPerMeter;
+      if (cy > 45 && cy < H - 25) {
+        oCtx.save();
+        if (c.glow || camD > 1200) {
+          oCtx.shadowColor = c.glow || "#38bdf8";
+          oCtx.shadowBlur = 12;
+        }
+        oCtx.globalAlpha = oceanWorld.diveActive ? 0.88 : 0.45;
+        oCtx.font = `${c.size}px sans-serif`;
+        oCtx.textAlign = "center";
+        oCtx.textBaseline = "middle";
+        oCtx.fillText(c.emoji, c.xNorm * W, cy);
+        oCtx.restore();
+      }
+    });
+
+    // 6. Partikel Salju Laut & Gelembung Naik
+    oceanWorld.particles.forEach((p) => {
+      p.yNorm -= p.speed + (speedM * 0.0009);
+      if (p.yNorm < 0) {
+        p.yNorm = 1;
+        p.xNorm = Math.random();
+      }
+      oCtx.beginPath();
+      oCtx.arc(p.xNorm * W, p.yNorm * H, p.r, 0, Math.PI * 2);
+      oCtx.fillStyle =
+        camD > 2000
+          ? `rgba(192, 132, 252, ${p.alpha})`
+          : `rgba(186, 230, 253, ${p.alpha})`;
+      oCtx.fill();
+    });
+
+    // 7. Penggaris Kedalaman di Tepi Kanan (-100m, -200m...) + Jarum "YOU"
+    oCtx.save();
+    const rulerX = W - 12;
+    oCtx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+    oCtx.lineWidth = 1;
+    oCtx.beginPath();
+    oCtx.moveTo(rulerX, 60);
+    oCtx.lineTo(rulerX, H - 20);
+    oCtx.stroke();
+
+    const startTick = Math.max(0, Math.floor((camD - H / (2 * pxPerMeter)) / 25) * 25);
+    const endTick = Math.ceil((camD + H / (2 * pxPerMeter)) / 25) * 25;
+    oCtx.font = "600 9px monospace";
+    oCtx.textAlign = "right";
+    for (let m = startTick; m <= endTick; m += 25) {
+      const ty = anchorY + (m - camD) * pxPerMeter;
+      if (ty > 64 && ty < H - 22) {
+        const isMajor = m % 100 === 0;
+        oCtx.strokeStyle = isMajor ? "rgba(186, 230, 253, 0.55)" : "rgba(148, 163, 184, 0.25)";
+        oCtx.beginPath();
+        oCtx.moveTo(rulerX - (isMajor ? 10 : 5), ty);
+        oCtx.lineTo(rulerX, ty);
+        oCtx.stroke();
+        if (isMajor) {
+          oCtx.fillStyle = "rgba(203, 213, 225, 0.72)";
+          oCtx.fillText(`-${m}m`, rulerX - 13, ty + 3);
+        }
+      }
+    }
+
+    // Jarum Penunjuk "YOU"
+    oCtx.fillStyle = "#fb7185";
+    oCtx.beginPath();
+    oCtx.moveTo(rulerX - 14, anchorY);
+    oCtx.lineTo(rulerX - 2, anchorY - 4);
+    oCtx.lineTo(rulerX - 2, anchorY + 4);
+    oCtx.closePath();
+    oCtx.fill();
+    oCtx.font = "800 9px Outfit, sans-serif";
+    oCtx.fillText("YOU", rulerX - 17, anchorY + 3);
+    oCtx.restore();
+
+    // 8. Render Udang / Krill Pemain (Saat Menyelam MAUPUN Saat Mengambang Membaca Soal!)
+    if (oceanWorld.diveActive) {
+      const count = oceanWorld.diveResults.length || 1;
+      oceanWorld.diveResults.forEach((r, idx) => {
+        const startD = Math.max(0, (r.totalDepth || 0) - (r.depthGained || 0));
+        const curD = startD + (r.depthGained || 0) * diveProgress;
+        const laneX = count === 1 ? W * 0.5 : W * (0.2 + (idx / (count - 1)) * 0.56);
+        const dy = anchorY + (curD - camD) * pxPerMeter;
+        const isMe = r.playerId === oceanWorld.diveMyId;
+        if (dy > 40 && dy < H - 25) {
+          const wordTag = r.answered
+            ? `"${r.canonicalName.toUpperCase()}" ${r.isCollision ? "💥" : "▼"}`
+            : "0m";
+          drawGlowingKrill(
+            oCtx,
+            laneX,
+            dy,
+            now,
+            isMe ? 1.18 : 0.85,
+            isMe,
+            r.playerColor,
+            r.playerAvatar,
+            `${r.playerName.slice(0, 8)} +${Math.round((r.depthGained || 0) * diveProgress)}m`,
+            isMe || diveProgress > 0.35 ? wordTag : null,
+            r.isCollision,
+            r.isSoleExplorer
+          );
+        }
+      });
+    } else if (currentRoom && currentRoom.players) {
+      const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
+      const players = currentRoom.players;
+      const count = players.length || 1;
+      players.forEach((p, idx) => {
+        const isMe = p.id === myId;
+        const pDepth = p.totalDepth || 0;
+        const laneX = isMe
+          ? W * 0.24
+          : W * (0.45 + ((idx % Math.max(1, count - 1)) / Math.max(1, count)) * 0.38);
+        const py = isMe
+          ? anchorY + Math.sin(now * 0.0025) * 5
+          : anchorY + (pDepth - camD) * pxPerMeter + Math.sin(now * 0.002 + idx) * 4;
+        if (py > 60 && py < H - 65) {
+          oCtx.save();
+          if (!isMe) oCtx.globalAlpha = 0.62;
+          drawGlowingKrill(
+            oCtx,
+            laneX,
+            py,
+            now,
+            isMe ? 1.05 : 0.72,
+            isMe,
+            p.color,
+            p.avatar,
+            isMe ? null : `${p.name.slice(0, 7)} (${pDepth}m)`,
+            null,
+            false,
+            false
+          );
+          oCtx.restore();
+        }
+      });
+    }
+  }
+
+  oceanWorld.rafId = requestAnimationFrame(tick);
+}
+
+function playGroupDescendAnimation(payload, onDone) {
+  stopDescendAnimation();
+  ensurePersistentOceanRunning();
+
+  const phaseDescend = document.getElementById("phase-descend");
   document.getElementById("phase-playing").classList.add("hidden");
   document.getElementById("phase-reveal").classList.add("hidden");
-  phaseDescend.classList.remove("hidden");
-
-  const dCtx = dCanvas.getContext("2d");
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const rect = dCanvas.parentElement.getBoundingClientRect();
-  const W = Math.max(300, Math.round(rect.width));
-  const H = Math.max(260, Math.round(rect.height));
-  dCanvas.width = W * dpr;
-  dCanvas.height = H * dpr;
-  dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (phaseDescend) phaseDescend.classList.remove("hidden");
 
   const results = payload.results || [];
   const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
   const myResult = results.find((r) => r.playerId === myId) || results[0];
-  const myTarget = myResult ? myResult.depthGained : 0;
-  const maxTarget = Math.max(320, ...results.map((r) => r.depthGained || 0));
 
-  const zoneBadge = document.getElementById("descend-zone-badge");
-  const odometerEl = document.getElementById("descend-depth-counter");
+  const myNewDepth = myResult ? myResult.totalDepth : oceanWorld.cameraDepth;
+  const myGain = myResult ? myResult.depthGained : 0;
+  const fromDepth = Math.max(0, myNewDepth - myGain);
+
   const answerPillEl = document.getElementById("descend-my-answer-pill");
-
-  if (myResult && myResult.answered) {
-    answerPillEl.textContent = `📡 "${myResult.canonicalName}"${
-      myResult.isCollision ? " • 💥 Tabrakan!" : myResult.isSoleExplorer ? " • 🌟 Penemu Tunggal!" : ""
-    }`;
-  } else {
-    answerPillEl.textContent = "💨 Kehabisan Oksigen — Tidak Menjawab";
+  if (answerPillEl) {
+    if (myResult && myResult.answered) {
+      answerPillEl.textContent = `📡 "${myResult.canonicalName}"${
+        myResult.isCollision ? " • 💥 Tabrakan!" : myResult.isSoleExplorer ? " • 🌟 Penemu Tunggal!" : ""
+      }`;
+    } else {
+      answerPillEl.textContent = "💨 Kehabisan Oksigen — Tidak Menjawab";
+    }
   }
 
-  // Biota laut sesuai kedalaman (0m -> 1150m)
-  const creatures = [];
-  const creatureBank = [
-    { minD: 30, maxD: 340, emoji: "🐠", size: 22, speedX: 0.7 },
-    { minD: 60, maxD: 380, emoji: "🐢", size: 28, speedX: -0.55 },
-    { minD: 120, maxD: 480, emoji: "🐡", size: 24, speedX: 0.45 },
-    { minD: 210, maxD: 620, emoji: "🐬", size: 28, speedX: -0.9 },
-    { minD: 330, maxD: 760, emoji: "🪼", size: 28, speedX: 0.25 },
-    { minD: 430, maxD: 850, emoji: "🦑", size: 26, speedX: 0.6 },
-    { minD: 560, maxD: 980, emoji: "🦈", size: 32, speedX: -1.1 },
-    { minD: 720, maxD: 1180, emoji: "🐡", size: 24, speedX: 0.35, glow: "#c084fc" },
-    { minD: 820, maxD: 1220, emoji: "🐉", size: 30, speedX: -0.65, glow: "#facc15" }
-  ];
-  for (let i = 0; i < 24; i++) {
-    const tpl = creatureBank[i % creatureBank.length];
-    creatures.push({
-      depth: tpl.minD + Math.random() * (tpl.maxD - tpl.minD),
-      x: 45 + Math.random() * (W - 90),
-      emoji: tpl.emoji,
-      size: tpl.size,
-      speedX: tpl.speedX * (Math.random() > 0.5 ? 1 : -1),
-      glow: tpl.glow || null
-    });
+  const ambientEl = document.getElementById("descend-ambient-fact");
+  if (ambientEl) {
+    ambientEl.textContent =
+      AMBIENT_OCEAN_FACTS[Math.floor(Math.random() * AMBIENT_OCEAN_FACTS.length)];
   }
 
-  // Partikel gelembung & bioluminesensi parallax
-  const particles = Array.from({ length: 55 }, () => ({
-    x: Math.random() * W,
-    y: Math.random() * H,
-    r: 1.2 + Math.random() * 3.4,
-    layer: 0.5 + Math.random() * 1.4,
-    alpha: 0.2 + Math.random() * 0.6
-  }));
-
-  const diveDurationMs = 4100;
-  const startTime = performance.now();
-  let lastTierSound = 0;
-  let lastBubbleTime = 0;
-  let prevCamDepth = 0;
-
-  descendFinishCallback = () => {
-    phaseDescend.classList.add("hidden");
+  oceanWorld.diveResults = results;
+  oceanWorld.diveMyId = myId;
+  oceanWorld.diveFromDepth = fromDepth;
+  oceanWorld.diveToDepth = myNewDepth;
+  oceanWorld.cameraDepth = fromDepth;
+  oceanWorld.diveStartTime = performance.now();
+  oceanWorld.diveDurationMs = 4000;
+  oceanWorld.lastTierSound = 0;
+  oceanWorld.lastBubbleTime = 0;
+  oceanWorld.diveActive = true;
+  oceanWorld.diveOnDone = () => {
+    if (phaseDescend) phaseDescend.classList.add("hidden");
     onDone();
   };
-
-  function drawSubmarine(x, y, res, camDepth, isMe, tNow) {
-    const subW = isMe ? 54 : 44;
-    const subH = isMe ? 26 : 22;
-    const color = res.playerColor || "#38bdf8";
-
-    dCtx.save();
-    dCtx.translate(x, y);
-
-    // Sorot Lampu Kapal Selam ke Bawah (Makin terang di laut gelap)
-    const beamAlpha = Math.min(0.42, 0.08 + (camDepth / 1000) * 0.34);
-    const beamGrad = dCtx.createLinearGradient(0, 6, 0, 105);
-    beamGrad.addColorStop(0, `rgba(186, 230, 253, ${beamAlpha})`);
-    beamGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
-    dCtx.beginPath();
-    dCtx.moveTo(-12, subH / 2);
-    dCtx.lineTo(-42, 105);
-    dCtx.lineTo(42, 105);
-    dCtx.lineTo(12, subH / 2);
-    dCtx.closePath();
-    dCtx.fillStyle = beamGrad;
-    dCtx.fill();
-
-    // Aura Emas untuk Penemu Tunggal
-    if (res.isSoleExplorer) {
-      dCtx.beginPath();
-      dCtx.arc(0, 0, subW * 0.72 + Math.sin(tNow * 0.01) * 3, 0, Math.PI * 2);
-      dCtx.strokeStyle = "rgba(250, 204, 21, 0.65)";
-      dCtx.lineWidth = 2.5;
-      dCtx.stroke();
-    }
-
-    // Gelombang Merah jika Tabrakan
-    if (res.isCollision && camDepth >= res.depthGained * 0.75) {
-      dCtx.beginPath();
-      dCtx.arc(0, 0, subW * 0.75 + (tNow % 400) * 0.04, 0, Math.PI * 2);
-      dCtx.strokeStyle = "rgba(244, 63, 94, 0.8)";
-      dCtx.lineWidth = 2.5;
-      dCtx.stroke();
-    }
-
-    // Menara Periskop
-    dCtx.fillStyle = color;
-    dCtx.fillRect(-5, -subH / 2 - 7, 10, 8);
-
-    // Badan Kapal Selam
-    dCtx.beginPath();
-    dCtx.roundRect(-subW / 2, -subH / 2, subW, subH, subH / 2);
-    dCtx.fillStyle = isMe ? "#0f172a" : "#0b192e";
-    dCtx.fill();
-    dCtx.lineWidth = isMe ? 3 : 2;
-    dCtx.strokeStyle = res.isCollision ? "#f43f5e" : color;
-    dCtx.stroke();
-
-    // Avatar Penyelam di Jendela
-    dCtx.font = `${isMe ? 17 : 14}px sans-serif`;
-    dCtx.textAlign = "center";
-    dCtx.textBaseline = "middle";
-    dCtx.fillText(res.playerAvatar || "🤿", 0, 1);
-
-    // Label Nama & Meteran
-    const tagText = `${res.playerName.slice(0, 9)} • +${res.currentDepth}m`;
-    dCtx.font = "700 10px Outfit, sans-serif";
-    const textW = dCtx.measureText(tagText).width + 12;
-    dCtx.fillStyle = isMe ? "rgba(2, 132, 199, 0.9)" : "rgba(4, 13, 26, 0.82)";
-    dCtx.beginPath();
-    dCtx.roundRect(-textW / 2, -subH / 2 - 26, textW, 16, 6);
-    dCtx.fill();
-    dCtx.fillStyle = "#ffffff";
-    dCtx.fillText(tagText, 0, -subH / 2 - 18);
-
-    if (res.isCollision && camDepth >= res.depthGained * 0.8) {
-      dCtx.font = "800 11px Outfit, sans-serif";
-      dCtx.fillStyle = "#fda4af";
-      dCtx.fillText("💥 TABRAKAN -50%", 0, subH / 2 + 14);
-    }
-
-    dCtx.restore();
-  }
-
-  function frame(now) {
-    const elapsed = now - startTime;
-    const rawProgress = Math.min(1, elapsed / diveDurationMs);
-    // Ease-out cubic: cepat melesat di awal lalu melambat mendarat di dasar
-    const ease = 1 - Math.pow(1 - rawProgress, 3);
-    const camDepth = maxTarget * ease;
-    const speedM = Math.max(0, camDepth - prevCamDepth);
-    prevCamDepth = camDepth;
-
-    // 1. Gradasi Air Sesuai Kedalaman
-    const colors = getOceanColorsAtDepth(camDepth);
-    const bgGrad = dCtx.createLinearGradient(0, 0, 0, H);
-    bgGrad.addColorStop(0, colors.top);
-    bgGrad.addColorStop(1, colors.bot);
-    dCtx.fillStyle = bgGrad;
-    dCtx.fillRect(0, 0, W, H);
-
-    // 2. Sinar Matahari di Zona Dangkal (memudar seiring kedalaman)
-    if (camDepth < 420) {
-      const rayAlpha = Math.max(0, (1 - camDepth / 420) * 0.22);
-      dCtx.save();
-      for (let i = 0; i < 4; i++) {
-        const rx = W * (0.15 + i * 0.24) + Math.sin(now * 0.001 + i) * 18;
-        const rGrad = dCtx.createLinearGradient(rx, 0, rx + 40, H * 0.85);
-        rGrad.addColorStop(0, `rgba(186, 230, 253, ${rayAlpha})`);
-        rGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
-        dCtx.fillStyle = rGrad;
-        dCtx.beginPath();
-        dCtx.moveTo(rx - 22, 0);
-        dCtx.lineTo(rx + 22, 0);
-        dCtx.lineTo(rx + 90, H);
-        dCtx.lineTo(rx - 30, H);
-        dCtx.closePath();
-        dCtx.fill();
-      }
-      dCtx.restore();
-    }
-
-    // 3. Dinding Tebing Palung Kiri & Kanan (Parallax Scroll ke Atas)
-    const wallOffset = (camDepth * 1.4) % 90;
-    dCtx.fillStyle = "rgba(2, 8, 20, 0.42)";
-    dCtx.beginPath();
-    dCtx.moveTo(0, 0);
-    for (let y = -90; y <= H + 90; y += 45) {
-      const wLeft = 14 + Math.sin((y + camDepth * 1.4) * 0.025) * 10;
-      dCtx.lineTo(wLeft, y - wallOffset);
-    }
-    dCtx.lineTo(0, H);
-    dCtx.closePath();
-    dCtx.fill();
-
-    dCtx.beginPath();
-    dCtx.moveTo(W, 0);
-    for (let y = -90; y <= H + 90; y += 45) {
-      const wRight = W - (14 + Math.cos((y + camDepth * 1.4) * 0.025) * 10);
-      dCtx.lineTo(wRight, y - wallOffset);
-    }
-    dCtx.lineTo(W, H);
-    dCtx.closePath();
-    dCtx.fill();
-
-    // 4. Garis Pengukur Kedalaman (tiap 100m meluncur ke atas!)
-    const pxPerMeter = 1.15;
-    const minVisibleM = Math.floor((camDepth - H / (2 * pxPerMeter)) / 100) * 100;
-    const maxVisibleM = Math.ceil((camDepth + H / (2 * pxPerMeter)) / 100) * 100;
-    dCtx.font = "700 10px Outfit, sans-serif";
-    dCtx.textAlign = "right";
-    for (let m = Math.max(100, minVisibleM); m <= maxVisibleM; m += 100) {
-      const screenY = H * 0.56 + (m - camDepth) * pxPerMeter;
-      if (screenY > 12 && screenY < H - 12) {
-        dCtx.strokeStyle =
-          m === 350 || m === 650 || m === 890
-            ? "rgba(250, 204, 21, 0.35)"
-            : "rgba(148, 163, 184, 0.16)";
-        dCtx.lineWidth = 1;
-        dCtx.beginPath();
-        dCtx.moveTo(26, screenY);
-        dCtx.lineTo(W - 26, screenY);
-        dCtx.stroke();
-
-        dCtx.fillStyle = "rgba(226, 232, 240, 0.55)";
-        dCtx.fillText(`${m}m`, W - 28, screenY - 4);
-      }
-    }
-
-    // 5. Biota Laut yang Lewat Sesuai Kedalaman
-    creatures.forEach((c) => {
-      c.x += c.speedX;
-      if (c.x < 32) c.x = W - 36;
-      if (c.x > W - 32) c.x = 36;
-      const cy = H * 0.56 + (c.depth - camDepth) * pxPerMeter;
-      if (cy > -40 && cy < H + 40) {
-        dCtx.save();
-        if (c.glow || camDepth > 550) {
-          dCtx.shadowColor = c.glow || "#38bdf8";
-          dCtx.shadowBlur = 14;
-        }
-        dCtx.font = `${c.size}px sans-serif`;
-        dCtx.textAlign = "center";
-        dCtx.textBaseline = "middle";
-        dCtx.fillText(c.emoji, c.x, cy);
-        dCtx.restore();
-      }
-    });
-
-    // 6. Partikel Gelembung & Cahaya Bioluminesensi Melesat ke Atas
-    particles.forEach((p) => {
-      p.y -= (1.5 + speedM * 2.4) * p.layer;
-      if (p.y < -8) {
-        p.y = H + 8;
-        p.x = 20 + Math.random() * (W - 40);
-      }
-      dCtx.beginPath();
-      dCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      dCtx.fillStyle =
-        camDepth > 620
-          ? `rgba(192, 132, 252, ${p.alpha})`
-          : `rgba(186, 230, 253, ${p.alpha})`;
-      dCtx.fill();
-    });
-
-    // 7. Render Semua Kapal Selam Pemain Menyelam Bersama!
-    const count = results.length || 1;
-    const sortedForDisplay = [...results];
-    sortedForDisplay.forEach((res, idx) => {
-      const targetD = res.depthGained || 0;
-      const currentD = Math.round(Math.min(targetD, camDepth));
-      res.currentDepth = currentD;
-
-      const laneX =
-        count === 1 ? W / 2 : 52 + (idx / (count - 1)) * (W - 104);
-      // Kapal selam yang berhenti lebih dangkal tertinggal di atas kamera!
-      const relY = H * 0.54 - (camDepth - currentD) * 0.82 + Math.sin(now * 0.006 + idx) * 3;
-      if (relY > -60 && relY < H + 60) {
-        drawSubmarine(laneX, relY, res, camDepth, res.playerId === myId, now);
-      }
-    });
-
-    // 8. Update HUD Odometer & Zona (untuk penyelam kita sendiri)
-    const myCurrentDepth = Math.round(Math.min(myTarget, camDepth));
-    odometerEl.textContent = `+${formatMeters(myCurrentDepth)}`;
-    const zone = getZoneLabelAtDepth(myCurrentDepth);
-    zoneBadge.textContent = zone.text;
-    zoneBadge.style.borderColor = zone.color;
-    zoneBadge.style.color = zone.color;
-
-    // 9. Efek Suara Gelembung & Ping Tiap Menembus Zona Baru
-    if (now - lastBubbleTime > 170 && speedM > 1.5) {
-      lastBubbleTime = now;
-      playBubblePop(0.032);
-    }
-    if (myCurrentDepth >= 890 && lastTierSound < 3) {
-      lastTierSound = 3;
-      playSonarPing(1046.5, 0.25);
-      triggerHaptic([40, 30, 80]);
-    } else if (myCurrentDepth >= 650 && lastTierSound < 2) {
-      lastTierSound = 2;
-      playSonarPing(783.99, 0.2);
-      triggerHaptic(35);
-    } else if (myCurrentDepth >= 350 && lastTierSound < 1) {
-      lastTierSound = 1;
-      playSonarPing(659.25, 0.16);
-    }
-
-    if (rawProgress < 1) {
-      descendRafId = requestAnimationFrame(frame);
-    } else {
-      setTimeout(() => {
-        if (descendFinishCallback) {
-          const cb = descendFinishCallback;
-          stopDescendAnimation();
-          cb();
-        }
-      }, 480);
-    }
-  }
-
-  descendRafId = requestAnimationFrame(frame);
 }
 
 // ============================================================================

@@ -2316,3 +2316,431 @@ body.keyboard-open .app-container {
     height: 340px;
   }
 }
+
+
+/* ==================== KRILLION-INSPIRED CONTINUOUS FULL-SCREEN OCEAN ==================== */
+.ocean-screen {
+  width: 100%;
+}
+
+.ocean-stage-container {
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 105px);
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+  background: #04152d;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#persistent-ocean-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Top Minimal HUD */
+.ocean-hud-top {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.75rem 1.1rem;
+  background: linear-gradient(180deg, rgba(2, 10, 24, 0.86) 0%, rgba(2, 10, 24, 0.12) 100%);
+}
+
+.ohud-box {
+  background: rgba(5, 18, 38, 0.82);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  padding: 0.38rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 84px;
+}
+
+.ohud-label {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  color: #94a3b8;
+}
+
+.ohud-value {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--cyan);
+}
+
+.ohud-score .ohud-value {
+  color: #fb7185;
+}
+
+.ohud-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.ohud-pips {
+  display: flex;
+  gap: 0.32rem;
+}
+
+.ohud-pips .pip {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(15, 35, 65, 0.85);
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  transition: all 0.25s;
+}
+
+.ohud-pips .pip.active {
+  background: #f43f5e;
+  border-color: #fda4af;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.7);
+  transform: scale(1.1);
+}
+
+.ohud-pips .pip.done-plankton { background: #10b981; border-color: #6ee7b7; }
+.ohud-pips .pip.done-karang { background: #38bdf8; border-color: #bae6fd; }
+.ohud-pips .pip.done-abisal { background: #c084fc; border-color: #e9d5ff; }
+.ohud-pips .pip.done-legenda { background: #facc15; border-color: #fef08a; }
+.ohud-pips .pip.done-collision { background: #f43f5e; border-color: #fda4af; }
+.ohud-pips .pip.done-missed { background: #475569; border-color: #94a3b8; }
+
+.ohud-round-text {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #cbd5e1;
+}
+
+.ohud-right-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ohud-crew-btn {
+  background: rgba(5, 18, 38, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 0.55rem 0.65rem;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.crew-drawer-popover {
+  position: absolute;
+  top: 66px;
+  right: 14px;
+  width: 280px;
+  max-height: 310px;
+  overflow-y: auto;
+  z-index: 30;
+  background: rgba(4, 15, 32, 0.94);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--cyan);
+  border-radius: 16px;
+  padding: 0.85rem;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
+}
+
+.crew-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--cyan);
+}
+
+/* Layer Bermain di Atas Air */
+.ocean-playing-layer {
+  position: relative;
+  z-index: 8;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.4rem 1.2rem 0.85rem;
+  pointer-events: none;
+}
+
+.ocean-playing-layer > * {
+  pointer-events: auto;
+}
+
+/* Kartu Pertanyaan Scanline Melayang ala Krillion */
+.krillion-prompt-card {
+  max-width: 580px;
+  width: 100%;
+  margin: 0.35rem auto 0;
+  padding: 1.15rem 1.35rem;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(6, 20, 42, 0.88) 0%, rgba(4, 14, 30, 0.82) 100%);
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(56, 189, 248, 0.04) 0px,
+    rgba(56, 189, 248, 0.04) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.48);
+  text-align: center;
+}
+
+.kpc-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+}
+
+.krillion-prompt-card .prompt-title {
+  font-size: clamp(1.3rem, 2.5vw, 1.85rem);
+  margin-bottom: 0.35rem;
+}
+
+.krillion-prompt-card .prompt-hint {
+  font-size: 0.82rem;
+  margin-bottom: 0.45rem;
+}
+
+.kpc-subline {
+  font-size: 0.7rem;
+  letter-spacing: 0.9px;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.compact-oxygen {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.oxygen-mini-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.oxygen-mini-row .oxygen-track {
+  flex: 1;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(15, 35, 65, 0.85);
+  overflow: hidden;
+}
+
+.oxygen-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #38bdf8, #10b981);
+  transition: width 0.35s ease;
+}
+
+.oxygen-bar.low { background: #facc15; }
+.oxygen-bar.critical { background: #f43f5e; }
+
+.oxygen-val-text {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.btn-sonar-ping {
+  background: rgba(56, 189, 248, 0.16);
+  color: #bae6fd;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-sonar-ping:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sonar-ping-result {
+  font-size: 0.74rem;
+  color: var(--gold);
+  margin-top: 0.35rem;
+  min-height: 16px;
+}
+
+.ocean-locked {
+  max-width: 460px;
+  margin: auto auto 0.5rem;
+  background: rgba(4, 24, 38, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+/* Dock Input Menempel Bawah */
+.ocean-dock-bottom {
+  max-width: 640px;
+  width: 100%;
+  margin: auto auto 0;
+  padding-top: 0.5rem;
+}
+
+.ocean-answer-form {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ocean-timer .timer-ring {
+  width: 48px;
+  height: 48px;
+  font-size: 1.25rem;
+  background: rgba(4, 15, 32, 0.9);
+}
+
+.ocean-input-wrap {
+  flex: 1;
+  padding: 0.28rem 0.35rem 0.28rem 0.85rem;
+  border-radius: 14px;
+}
+
+.ocean-timer-bar {
+  margin: 0.45rem 0 0.35rem;
+  height: 5px;
+}
+
+.ocean-react-strip {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+/* Overlay Fase Descend di Atas Lautan yang Sama */
+.ocean-descend-overlay {
+  position: relative;
+  z-index: 12;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem 1.25rem;
+  pointer-events: none;
+}
+
+.ocean-descend-overlay > * {
+  pointer-events: auto;
+}
+
+.descend-floating-banner {
+  text-align: center;
+  background: rgba(3, 12, 26, 0.62);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 16px;
+  padding: 0.55rem 1.25rem;
+}
+
+.descend-ambient-fact {
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: rgba(186, 230, 253, 0.78);
+  background: rgba(2, 10, 22, 0.62);
+  padding: 0.35rem 0.85rem;
+  border-radius: 99px;
+  text-align: center;
+}
+
+.ocean-skip-btn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+}
+
+/* Kartu Reveal Mengambang di Atas Lautan */
+.ocean-reveal-sheet {
+  position: relative;
+  z-index: 15;
+  margin: 0.5rem 1rem 1rem;
+  padding: 1.25rem;
+  border-radius: 18px;
+  background: rgba(4, 15, 32, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+/* Responsif Layar HP & Simulator */
+.phone-frame-wrapper.simulated-phone .ocean-stage-container {
+  min-height: 675px;
+}
+
+@media (max-width: 768px) {
+  .ocean-stage-container {
+    min-height: calc(100dvh - 135px);
+    border-radius: 16px;
+  }
+
+  .ocean-hud-top {
+    padding: 0.55rem 0.65rem;
+  }
+
+  .ohud-box {
+    min-width: 68px;
+    padding: 0.28rem 0.55rem;
+  }
+
+  .ohud-value {
+    font-size: 0.96rem;
+  }
+
+  .ohud-pips .pip {
+    width: 11px;
+    height: 11px;
+  }
+
+  .ocean-playing-layer {
+    padding: 0.25rem 0.65rem 0.6rem;
+  }
+
+  .krillion-prompt-card {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .krillion-prompt-card .prompt-title {
+    font-size: 1.18rem;
+  }
+
+  .ocean-reveal-sheet {
+    margin: 0.35rem 0.55rem 0.65rem;
+    padding: 0.95rem;
+  }
+}
+
+body.keyboard-open .ocean-stage-container {
+  min-height: calc(100dvh - 76px);
+}
+
+body.keyboard-open .ocean-react-strip {
+  display: none;
+}
