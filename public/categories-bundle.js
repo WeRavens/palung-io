@@ -4005,7 +4005,7 @@ window.PALUNG_CATEGORIES = [
           "plankton"
         ],
         "score": 62,
-        "fact": "Krustasea mungil yang menjadi inspirasi game Krillion.io! Total biomassa Krill Antarktika mencapai ratusan juta ton dan menjadi makanan utama Paus Biru."
+        "fact": "Krustasea mungil yang menjadi dasar rantai makanan samudra! Total biomassa Krill Antarktika mencapai ratusan juta ton dan menjadi makanan utama Paus Biru."
       },
       {
         "name": "Anglerfish",

@@ -1,9 +1,9 @@
 // Database Kategori & Jawaban Berjenjang (Rarity-Based Open-Ended Trivia)
-// Terinspirasi dari Krillion.io dengan pengayaan Edukasi, Sains, Geografi, & Budaya Nusantara.
+// Dengan pengayaan Edukasi, Sains, Geografi, & Budaya Nusantara.
 // Skor 10 - 34  : PLANKTON (Umum / Pasaran) -> 100m - 340m
 // Skor 35 - 64  : KARANG (Cukup Unik)       -> 350m - 640m
 // Skor 65 - 88  : ABISAL (Langka / Deep Cut)-> 650m - 880m
-// Skor 89 - 100 : LEGENDA PALUNG (1 in a Krillion!) -> 890m - 1000m
+// Skor 89 - 100 : LEGENDA PALUNG (Sedalam Palung, Selangka Mutiara!) -> 890m - 1000m
 
 const CATEGORIES = [
   {
@@ -59,7 +59,7 @@ const CATEGORIES = [
       { name: "Armenia", aliases: [], score: 86, fact: "Negara pertama dalam sejarah yang mengadopsi agama Kristen sebagai agama negara pada tahun 301 Masehi." },
       { name: "Azerbaijan", aliases: [], score: 87, fact: "Dikenal sebagai 'Tanah Api' karena adanya semburan gas alam bawah tanah yang menyala abadi di bukit Yanar Dag." },
 
-      // LEGENDA PALUNG (1 in a Krillion!)
+      // LEGENDA PALUNG (Sedalam Palung, Selangka Mutiara!)
       { name: "Bhutan", aliases: [], score: 92, fact: "Satu-satunya negara karbon-negatif di dunia dan mengukur kemajuan negara dengan indeks 'Kebahagiaan Nasional Bruto' (GNH)." },
       { name: "Kirgizstan", aliases: ["kyrgyzstan", "kirgistan"], score: 95, fact: "Danau Issyk-Kul di Kirgizstan adalah danau pegunungan terbesar kedua di dunia yang tidak pernah membeku meski di musim dingin." },
       { name: "Tajikistan", aliases: ["tadzhikistan"], score: 96, fact: "Lebih dari 90% wilayah negaranya berupa pegunungan tinggi (Pegunungan Pamir, 'Atap Dunia')." },
@@ -679,7 +679,7 @@ const CATEGORIES = [
       { name: "Ikan Salmon", aliases: ["salmon", "ikan kakap", "ikan kerapu", "ikan teri"], score: 45, fact: "Lahir di sungai air tawar, bermigrasi ribuan kilometer ke samudra asin, lalu pulang kembali ke sungai kelahirannya menggunakan penciuman." },
       { name: "Ikan Terbang", aliases: ["flying fish", "ikan torani"], score: 58, fact: "Dapat meluncur di udara di atas permukaan laut sejauh 200 meter menggunakan sirip dadanya yang menyerupai sayap!" },
       { name: "Sotong", aliases: ["cuttlefish"], score: 60, fact: "Ahli kamuflase terbaik di laut yang dapat mengubah warna dan tekstur kulitnya dalam waktu kurang dari 1 detik meskipun ia sendiri buta warna!" },
-      { name: "Krill", aliases: ["plankton"], score: 62, fact: "Krustasea mungil yang menjadi inspirasi game Krillion.io! Total biomassa Krill Antarktika mencapai ratusan juta ton dan menjadi makanan utama Paus Biru." },
+      { name: "Krill", aliases: ["plankton"], score: 62, fact: "Krustasea mungil yang menjadi dasar rantai makanan samudra! Total biomassa Krill Antarktika mencapai ratusan juta ton dan menjadi makanan utama Paus Biru." },
 
       // ABISAL
       { name: "Anglerfish", aliases: ["ikan sungut ganda", "ikan lentera"], score: 68, fact: "Penghuni zona tengah malam laut dalam yang memiliki antena bercahaya di kepalanya berkat simbiosis dengan bakteri bioluminesensi!" },

@@ -685,6 +685,9 @@ function startLocalOfflineMatch({ isDaily = false } = {}) {
         roundDepth: 0,
         readyInRound: false,
         rerollsLeft: 1,
+        oxygen: 100,
+        sonarPings: 2,
+        sonarUsedRound: 0,
         historyTiers: [],
         bestAnswer: null
       },
@@ -699,6 +702,9 @@ function startLocalOfflineMatch({ isDaily = false } = {}) {
         roundDepth: 0,
         readyInRound: false,
         rerollsLeft: 0,
+        oxygen: 100,
+        sonarPings: 2,
+        sonarUsedRound: 0,
         historyTiers: [],
         bestAnswer: null
       },
@@ -713,6 +719,9 @@ function startLocalOfflineMatch({ isDaily = false } = {}) {
         roundDepth: 0,
         readyInRound: false,
         rerollsLeft: 0,
+        oxygen: 100,
+        sonarPings: 2,
+        sonarUsedRound: 0,
         historyTiers: [],
         bestAnswer: null
       },
@@ -727,6 +736,9 @@ function startLocalOfflineMatch({ isDaily = false } = {}) {
         roundDepth: 0,
         readyInRound: false,
         rerollsLeft: 0,
+        oxygen: 100,
+        sonarPings: 2,
+        sonarUsedRound: 0,
         historyTiers: [],
         bestAnswer: null
       }
@@ -840,6 +852,8 @@ function revealLocalRound() {
   currentRoom.players.forEach((p) => {
     const sub = currentRoom.roundSubmissions[p.id];
     if (!sub || !sub.match) {
+      const o0 = p.oxygen;
+      p.oxygen = Math.max(0, p.oxygen - 30);
       p.roundDepth = 0;
       p.historyTiers.push("⚫");
       results.push({
@@ -847,6 +861,8 @@ function revealLocalRound() {
         playerName: p.name,
         playerAvatar: p.avatar,
         playerColor: p.color,
+        oxygenDelta: p.oxygen - o0,
+        oxygenAfter: p.oxygen,
         answered: false,
         canonicalName: "Kehabisan Oksigen (Tidak Menjawab)",
         baseScore: 0,
@@ -867,6 +883,14 @@ function revealLocalRound() {
     let depthGained = baseScore * 10;
     if (isCollision) depthGained = Math.round(depthGained * 0.5);
     if (isSoleExplorer) depthGained += 150;
+
+    // Sistem Oksigen (sama seperti mode online)
+    const suffocating = p.oxygen <= 0;
+    if (suffocating) depthGained = Math.round(depthGained * 0.7);
+    const o0 = p.oxygen;
+    let oxDelta = { PLANKTON: -12, KARANG: -4, ABISAL: 6, LEGENDA: 12 }[tier.id] || 0;
+    if (isCollision) oxDelta -= 10;
+    p.oxygen = Math.max(0, Math.min(100, p.oxygen + oxDelta));
 
     p.roundDepth = depthGained;
     p.totalDepth += depthGained;
@@ -901,11 +925,17 @@ function revealLocalRound() {
       isCollision,
       collisionWithCount: counts[canonicalName],
       isSoleExplorer,
+      oxygenDelta: p.oxygen - o0,
+      oxygenAfter: p.oxygen,
+      suffocating,
       fact
     });
   });
 
   results.sort((a, b) => b.depthGained - a.depthGained);
+
+  const myRes = results.find((r) => r.playerId === "me");
+  if (myRes && typeof showOxygenToast === "function") showOxygenToast(myRes);
 
   const legendaryExamples = [...cat.answers]
     .sort((a, b) => b.score - a.score)
@@ -926,12 +956,12 @@ function revealLocalRound() {
     results,
     rarestGuessed,
     legendaryExamples,
-    nextRoundInMs: 9500
+    nextRoundInMs: 13000
   });
 
   const t = setTimeout(() => {
     if (isLocalOfflineGame) advanceLocalRound();
-  }, 9500);
+  }, 13000);
   localBotTimeouts.push(t);
 }
 
@@ -1444,6 +1474,9 @@ document.getElementById("btn-start-game").addEventListener("click", () => {
 // LAYAR PERMAINAN (FASE MENJAWAB & VISUALISASI PALUNG)
 // ============================================================================
 function clearClientTimers() {
+  if (typeof stopDescendAnimation === "function") {
+    stopDescendAnimation();
+  }
   if (roundTimerInterval) {
     clearInterval(roundTimerInterval);
     roundTimerInterval = null;
@@ -1564,6 +1597,7 @@ function handleRoundStartUI(payload) {
   playSonarPing(784, 0.2);
 
   document.getElementById("phase-playing").classList.remove("hidden");
+  document.getElementById("phase-descend").classList.add("hidden");
   document.getElementById("phase-reveal").classList.add("hidden");
 
   const inputAnswer = document.getElementById("input-answer");
@@ -1725,27 +1759,458 @@ function unlockRerollUI() {
 }
 
 // ============================================================================
+// ANIMASI GROUP DESCEND ALA KRILLION.IO (PARALLAX LAUT DALAM + KAPAL SELAM)
+// ============================================================================
+let descendRafId = null;
+let descendFinishCallback = null;
+
+function stopDescendAnimation() {
+  if (descendRafId) {
+    cancelAnimationFrame(descendRafId);
+    descendRafId = null;
+  }
+  descendFinishCallback = null;
+}
+
+const btnSkipDescend = document.getElementById("btn-skip-descend");
+if (btnSkipDescend) {
+  btnSkipDescend.addEventListener("click", () => {
+    const cb = descendFinishCallback;
+    stopDescendAnimation();
+    if (typeof cb === "function") cb();
+  });
+}
+
+function lerpNum(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function getOceanColorsAtDepth(depth) {
+  // Stops: 0m (Matahari) -> 350m (Karang) -> 650m (Abisal) -> 950m (Hadal)
+  const stops = [
+    { d: 0, top: [2, 132, 199], bot: [3, 105, 161] },
+    { d: 350, top: [3, 105, 161], bot: [30, 58, 138] },
+    { d: 650, top: [30, 27, 75], bot: [15, 7, 40] },
+    { d: 950, top: [9, 3, 20], bot: [2, 1, 8] }
+  ];
+  let s0 = stops[0];
+  let s1 = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (depth >= stops[i].d && depth <= stops[i + 1].d) {
+      s0 = stops[i];
+      s1 = stops[i + 1];
+      break;
+    }
+  }
+  if (depth >= s1.d) {
+    s0 = s1;
+  }
+  const span = Math.max(1, s1.d - s0.d);
+  const t = Math.min(1, Math.max(0, (depth - s0.d) / span));
+  const rT = Math.round(lerpNum(s0.top[0], s1.top[0], t));
+  const gT = Math.round(lerpNum(s0.top[1], s1.top[1], t));
+  const bT = Math.round(lerpNum(s0.top[2], s1.top[2], t));
+  const rB = Math.round(lerpNum(s0.bot[0], s1.bot[0], t));
+  const gB = Math.round(lerpNum(s0.bot[1], s1.bot[1], t));
+  const bB = Math.round(lerpNum(s0.bot[2], s1.bot[2], t));
+  return {
+    top: `rgb(${rT},${gT},${bT})`,
+    bot: `rgb(${rB},${gB},${bB})`
+  };
+}
+
+function getZoneLabelAtDepth(depth) {
+  if (depth >= 890) return { text: "🟡 LEGENDA PALUNG", color: "#facc15" };
+  if (depth >= 650) return { text: "🟣 ZONA ABISAL", color: "#c084fc" };
+  if (depth >= 350) return { text: "🔵 TERUMBU KARANG", color: "#38bdf8" };
+  return { text: "🟢 ZONA PLANKTON", color: "#10b981" };
+}
+
+function playGroupDescendAnimation(payload, onDone) {
+  stopDescendAnimation();
+  const phaseDescend = document.getElementById("phase-descend");
+  const dCanvas = document.getElementById("descend-canvas");
+  if (!phaseDescend || !dCanvas) {
+    onDone();
+    return;
+  }
+
+  document.getElementById("phase-playing").classList.add("hidden");
+  document.getElementById("phase-reveal").classList.add("hidden");
+  phaseDescend.classList.remove("hidden");
+
+  const dCtx = dCanvas.getContext("2d");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rect = dCanvas.parentElement.getBoundingClientRect();
+  const W = Math.max(300, Math.round(rect.width));
+  const H = Math.max(260, Math.round(rect.height));
+  dCanvas.width = W * dpr;
+  dCanvas.height = H * dpr;
+  dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const results = payload.results || [];
+  const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
+  const myResult = results.find((r) => r.playerId === myId) || results[0];
+  const myTarget = myResult ? myResult.depthGained : 0;
+  const maxTarget = Math.max(320, ...results.map((r) => r.depthGained || 0));
+
+  const zoneBadge = document.getElementById("descend-zone-badge");
+  const odometerEl = document.getElementById("descend-depth-counter");
+  const answerPillEl = document.getElementById("descend-my-answer-pill");
+
+  if (myResult && myResult.answered) {
+    answerPillEl.textContent = `📡 "${myResult.canonicalName}"${
+      myResult.isCollision ? " • 💥 Tabrakan!" : myResult.isSoleExplorer ? " • 🌟 Penemu Tunggal!" : ""
+    }`;
+  } else {
+    answerPillEl.textContent = "💨 Kehabisan Oksigen — Tidak Menjawab";
+  }
+
+  // Biota laut sesuai kedalaman (0m -> 1150m)
+  const creatures = [];
+  const creatureBank = [
+    { minD: 30, maxD: 340, emoji: "🐠", size: 22, speedX: 0.7 },
+    { minD: 60, maxD: 380, emoji: "🐢", size: 28, speedX: -0.55 },
+    { minD: 120, maxD: 480, emoji: "🐡", size: 24, speedX: 0.45 },
+    { minD: 210, maxD: 620, emoji: "🐬", size: 28, speedX: -0.9 },
+    { minD: 330, maxD: 760, emoji: "🪼", size: 28, speedX: 0.25 },
+    { minD: 430, maxD: 850, emoji: "🦑", size: 26, speedX: 0.6 },
+    { minD: 560, maxD: 980, emoji: "🦈", size: 32, speedX: -1.1 },
+    { minD: 720, maxD: 1180, emoji: "🐡", size: 24, speedX: 0.35, glow: "#c084fc" },
+    { minD: 820, maxD: 1220, emoji: "🐉", size: 30, speedX: -0.65, glow: "#facc15" }
+  ];
+  for (let i = 0; i < 24; i++) {
+    const tpl = creatureBank[i % creatureBank.length];
+    creatures.push({
+      depth: tpl.minD + Math.random() * (tpl.maxD - tpl.minD),
+      x: 45 + Math.random() * (W - 90),
+      emoji: tpl.emoji,
+      size: tpl.size,
+      speedX: tpl.speedX * (Math.random() > 0.5 ? 1 : -1),
+      glow: tpl.glow || null
+    });
+  }
+
+  // Partikel gelembung & bioluminesensi parallax
+  const particles = Array.from({ length: 55 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    r: 1.2 + Math.random() * 3.4,
+    layer: 0.5 + Math.random() * 1.4,
+    alpha: 0.2 + Math.random() * 0.6
+  }));
+
+  const diveDurationMs = 4100;
+  const startTime = performance.now();
+  let lastTierSound = 0;
+  let lastBubbleTime = 0;
+  let prevCamDepth = 0;
+
+  descendFinishCallback = () => {
+    phaseDescend.classList.add("hidden");
+    onDone();
+  };
+
+  function drawSubmarine(x, y, res, camDepth, isMe, tNow) {
+    const subW = isMe ? 54 : 44;
+    const subH = isMe ? 26 : 22;
+    const color = res.playerColor || "#38bdf8";
+
+    dCtx.save();
+    dCtx.translate(x, y);
+
+    // Sorot Lampu Kapal Selam ke Bawah (Makin terang di laut gelap)
+    const beamAlpha = Math.min(0.42, 0.08 + (camDepth / 1000) * 0.34);
+    const beamGrad = dCtx.createLinearGradient(0, 6, 0, 105);
+    beamGrad.addColorStop(0, `rgba(186, 230, 253, ${beamAlpha})`);
+    beamGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
+    dCtx.beginPath();
+    dCtx.moveTo(-12, subH / 2);
+    dCtx.lineTo(-42, 105);
+    dCtx.lineTo(42, 105);
+    dCtx.lineTo(12, subH / 2);
+    dCtx.closePath();
+    dCtx.fillStyle = beamGrad;
+    dCtx.fill();
+
+    // Aura Emas untuk Penemu Tunggal
+    if (res.isSoleExplorer) {
+      dCtx.beginPath();
+      dCtx.arc(0, 0, subW * 0.72 + Math.sin(tNow * 0.01) * 3, 0, Math.PI * 2);
+      dCtx.strokeStyle = "rgba(250, 204, 21, 0.65)";
+      dCtx.lineWidth = 2.5;
+      dCtx.stroke();
+    }
+
+    // Gelombang Merah jika Tabrakan
+    if (res.isCollision && camDepth >= res.depthGained * 0.75) {
+      dCtx.beginPath();
+      dCtx.arc(0, 0, subW * 0.75 + (tNow % 400) * 0.04, 0, Math.PI * 2);
+      dCtx.strokeStyle = "rgba(244, 63, 94, 0.8)";
+      dCtx.lineWidth = 2.5;
+      dCtx.stroke();
+    }
+
+    // Menara Periskop
+    dCtx.fillStyle = color;
+    dCtx.fillRect(-5, -subH / 2 - 7, 10, 8);
+
+    // Badan Kapal Selam
+    dCtx.beginPath();
+    dCtx.roundRect(-subW / 2, -subH / 2, subW, subH, subH / 2);
+    dCtx.fillStyle = isMe ? "#0f172a" : "#0b192e";
+    dCtx.fill();
+    dCtx.lineWidth = isMe ? 3 : 2;
+    dCtx.strokeStyle = res.isCollision ? "#f43f5e" : color;
+    dCtx.stroke();
+
+    // Avatar Penyelam di Jendela
+    dCtx.font = `${isMe ? 17 : 14}px sans-serif`;
+    dCtx.textAlign = "center";
+    dCtx.textBaseline = "middle";
+    dCtx.fillText(res.playerAvatar || "🤿", 0, 1);
+
+    // Label Nama & Meteran
+    const tagText = `${res.playerName.slice(0, 9)} • +${res.currentDepth}m`;
+    dCtx.font = "700 10px Outfit, sans-serif";
+    const textW = dCtx.measureText(tagText).width + 12;
+    dCtx.fillStyle = isMe ? "rgba(2, 132, 199, 0.9)" : "rgba(4, 13, 26, 0.82)";
+    dCtx.beginPath();
+    dCtx.roundRect(-textW / 2, -subH / 2 - 26, textW, 16, 6);
+    dCtx.fill();
+    dCtx.fillStyle = "#ffffff";
+    dCtx.fillText(tagText, 0, -subH / 2 - 18);
+
+    if (res.isCollision && camDepth >= res.depthGained * 0.8) {
+      dCtx.font = "800 11px Outfit, sans-serif";
+      dCtx.fillStyle = "#fda4af";
+      dCtx.fillText("💥 TABRAKAN -50%", 0, subH / 2 + 14);
+    }
+
+    dCtx.restore();
+  }
+
+  function frame(now) {
+    const elapsed = now - startTime;
+    const rawProgress = Math.min(1, elapsed / diveDurationMs);
+    // Ease-out cubic: cepat melesat di awal lalu melambat mendarat di dasar
+    const ease = 1 - Math.pow(1 - rawProgress, 3);
+    const camDepth = maxTarget * ease;
+    const speedM = Math.max(0, camDepth - prevCamDepth);
+    prevCamDepth = camDepth;
+
+    // 1. Gradasi Air Sesuai Kedalaman
+    const colors = getOceanColorsAtDepth(camDepth);
+    const bgGrad = dCtx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, colors.top);
+    bgGrad.addColorStop(1, colors.bot);
+    dCtx.fillStyle = bgGrad;
+    dCtx.fillRect(0, 0, W, H);
+
+    // 2. Sinar Matahari di Zona Dangkal (memudar seiring kedalaman)
+    if (camDepth < 420) {
+      const rayAlpha = Math.max(0, (1 - camDepth / 420) * 0.22);
+      dCtx.save();
+      for (let i = 0; i < 4; i++) {
+        const rx = W * (0.15 + i * 0.24) + Math.sin(now * 0.001 + i) * 18;
+        const rGrad = dCtx.createLinearGradient(rx, 0, rx + 40, H * 0.85);
+        rGrad.addColorStop(0, `rgba(186, 230, 253, ${rayAlpha})`);
+        rGrad.addColorStop(1, "rgba(186, 230, 253, 0)");
+        dCtx.fillStyle = rGrad;
+        dCtx.beginPath();
+        dCtx.moveTo(rx - 22, 0);
+        dCtx.lineTo(rx + 22, 0);
+        dCtx.lineTo(rx + 90, H);
+        dCtx.lineTo(rx - 30, H);
+        dCtx.closePath();
+        dCtx.fill();
+      }
+      dCtx.restore();
+    }
+
+    // 3. Dinding Tebing Palung Kiri & Kanan (Parallax Scroll ke Atas)
+    const wallOffset = (camDepth * 1.4) % 90;
+    dCtx.fillStyle = "rgba(2, 8, 20, 0.42)";
+    dCtx.beginPath();
+    dCtx.moveTo(0, 0);
+    for (let y = -90; y <= H + 90; y += 45) {
+      const wLeft = 14 + Math.sin((y + camDepth * 1.4) * 0.025) * 10;
+      dCtx.lineTo(wLeft, y - wallOffset);
+    }
+    dCtx.lineTo(0, H);
+    dCtx.closePath();
+    dCtx.fill();
+
+    dCtx.beginPath();
+    dCtx.moveTo(W, 0);
+    for (let y = -90; y <= H + 90; y += 45) {
+      const wRight = W - (14 + Math.cos((y + camDepth * 1.4) * 0.025) * 10);
+      dCtx.lineTo(wRight, y - wallOffset);
+    }
+    dCtx.lineTo(W, H);
+    dCtx.closePath();
+    dCtx.fill();
+
+    // 4. Garis Pengukur Kedalaman (tiap 100m meluncur ke atas!)
+    const pxPerMeter = 1.15;
+    const minVisibleM = Math.floor((camDepth - H / (2 * pxPerMeter)) / 100) * 100;
+    const maxVisibleM = Math.ceil((camDepth + H / (2 * pxPerMeter)) / 100) * 100;
+    dCtx.font = "700 10px Outfit, sans-serif";
+    dCtx.textAlign = "right";
+    for (let m = Math.max(100, minVisibleM); m <= maxVisibleM; m += 100) {
+      const screenY = H * 0.56 + (m - camDepth) * pxPerMeter;
+      if (screenY > 12 && screenY < H - 12) {
+        dCtx.strokeStyle =
+          m === 350 || m === 650 || m === 890
+            ? "rgba(250, 204, 21, 0.35)"
+            : "rgba(148, 163, 184, 0.16)";
+        dCtx.lineWidth = 1;
+        dCtx.beginPath();
+        dCtx.moveTo(26, screenY);
+        dCtx.lineTo(W - 26, screenY);
+        dCtx.stroke();
+
+        dCtx.fillStyle = "rgba(226, 232, 240, 0.55)";
+        dCtx.fillText(`${m}m`, W - 28, screenY - 4);
+      }
+    }
+
+    // 5. Biota Laut yang Lewat Sesuai Kedalaman
+    creatures.forEach((c) => {
+      c.x += c.speedX;
+      if (c.x < 32) c.x = W - 36;
+      if (c.x > W - 32) c.x = 36;
+      const cy = H * 0.56 + (c.depth - camDepth) * pxPerMeter;
+      if (cy > -40 && cy < H + 40) {
+        dCtx.save();
+        if (c.glow || camDepth > 550) {
+          dCtx.shadowColor = c.glow || "#38bdf8";
+          dCtx.shadowBlur = 14;
+        }
+        dCtx.font = `${c.size}px sans-serif`;
+        dCtx.textAlign = "center";
+        dCtx.textBaseline = "middle";
+        dCtx.fillText(c.emoji, c.x, cy);
+        dCtx.restore();
+      }
+    });
+
+    // 6. Partikel Gelembung & Cahaya Bioluminesensi Melesat ke Atas
+    particles.forEach((p) => {
+      p.y -= (1.5 + speedM * 2.4) * p.layer;
+      if (p.y < -8) {
+        p.y = H + 8;
+        p.x = 20 + Math.random() * (W - 40);
+      }
+      dCtx.beginPath();
+      dCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      dCtx.fillStyle =
+        camDepth > 620
+          ? `rgba(192, 132, 252, ${p.alpha})`
+          : `rgba(186, 230, 253, ${p.alpha})`;
+      dCtx.fill();
+    });
+
+    // 7. Render Semua Kapal Selam Pemain Menyelam Bersama!
+    const count = results.length || 1;
+    const sortedForDisplay = [...results];
+    sortedForDisplay.forEach((res, idx) => {
+      const targetD = res.depthGained || 0;
+      const currentD = Math.round(Math.min(targetD, camDepth));
+      res.currentDepth = currentD;
+
+      const laneX =
+        count === 1 ? W / 2 : 52 + (idx / (count - 1)) * (W - 104);
+      // Kapal selam yang berhenti lebih dangkal tertinggal di atas kamera!
+      const relY = H * 0.54 - (camDepth - currentD) * 0.82 + Math.sin(now * 0.006 + idx) * 3;
+      if (relY > -60 && relY < H + 60) {
+        drawSubmarine(laneX, relY, res, camDepth, res.playerId === myId, now);
+      }
+    });
+
+    // 8. Update HUD Odometer & Zona (untuk penyelam kita sendiri)
+    const myCurrentDepth = Math.round(Math.min(myTarget, camDepth));
+    odometerEl.textContent = `+${formatMeters(myCurrentDepth)}`;
+    const zone = getZoneLabelAtDepth(myCurrentDepth);
+    zoneBadge.textContent = zone.text;
+    zoneBadge.style.borderColor = zone.color;
+    zoneBadge.style.color = zone.color;
+
+    // 9. Efek Suara Gelembung & Ping Tiap Menembus Zona Baru
+    if (now - lastBubbleTime > 170 && speedM > 1.5) {
+      lastBubbleTime = now;
+      playBubblePop(0.032);
+    }
+    if (myCurrentDepth >= 890 && lastTierSound < 3) {
+      lastTierSound = 3;
+      playSonarPing(1046.5, 0.25);
+      triggerHaptic([40, 30, 80]);
+    } else if (myCurrentDepth >= 650 && lastTierSound < 2) {
+      lastTierSound = 2;
+      playSonarPing(783.99, 0.2);
+      triggerHaptic(35);
+    } else if (myCurrentDepth >= 350 && lastTierSound < 1) {
+      lastTierSound = 1;
+      playSonarPing(659.25, 0.16);
+    }
+
+    if (rawProgress < 1) {
+      descendRafId = requestAnimationFrame(frame);
+    } else {
+      setTimeout(() => {
+        if (descendFinishCallback) {
+          const cb = descendFinishCallback;
+          stopDescendAnimation();
+          cb();
+        }
+      }, 480);
+    }
+  }
+
+  descendRafId = requestAnimationFrame(frame);
+}
+
+// ============================================================================
 // FASE REVEAL HASIL RONDE & FAKTA EDUKATIF
 // ============================================================================
 function handleRoundRevealUI(payload) {
   setBgmMood("calm");
-  document.getElementById("phase-playing").classList.add("hidden");
-  document.getElementById("phase-reveal").classList.remove("hidden");
+  const revealReceivedAt = Date.now();
+  const totalWaitMs = payload.nextRoundInMs || 13500;
 
-  document.getElementById("reveal-round-num").textContent = `${payload.round}/${payload.roundsTotal}`;
-  document.getElementById("reveal-category-title").textContent = payload.categoryTitle;
+  // Jalankan countdown di background supaya timer akurat meski user menonton animasi descend
+  const timerEl = document.getElementById("reveal-next-timer");
+  const updateCountdownLabel = () => {
+    const rem = Math.max(0, Math.ceil((totalWaitMs - (Date.now() - revealReceivedAt)) / 1000));
+    timerEl.textContent = rem;
+    if (rem <= 0 && revealCountdownInterval) {
+      clearInterval(revealCountdownInterval);
+      revealCountdownInterval = null;
+    }
+  };
+  updateCountdownLabel();
+  revealCountdownInterval = setInterval(updateCountdownLabel, 500);
 
-  const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
-  const myResult = payload.results.find((r) => r.playerId === myId) || payload.results[0];
-  if (myResult) {
-    playRevealFanfare(myResult.tier.id, myResult.isCollision);
-    triggerSonarRipple(myResult.tier.color || "rgba(56, 189, 248, 0.5)");
-  }
+  // Tampilkan Animasi Group Descend ala Krillion.io terlebih dahulu!
+  playGroupDescendAnimation(payload, () => {
+    document.getElementById("phase-playing").classList.add("hidden");
+    document.getElementById("phase-descend").classList.add("hidden");
+    document.getElementById("phase-reveal").classList.remove("hidden");
 
-  const listEl = document.getElementById("reveal-results-list");
-  listEl.innerHTML = payload.results
-    .map(
-      (r) => `
+    document.getElementById("reveal-round-num").textContent = `${payload.round}/${payload.roundsTotal}`;
+    document.getElementById("reveal-category-title").textContent = payload.categoryTitle;
+
+    const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
+    const myResult = payload.results.find((r) => r.playerId === myId) || payload.results[0];
+    if (myResult) {
+      playRevealFanfare(myResult.tier.id, myResult.isCollision);
+      triggerSonarRipple(myResult.tier.color || "rgba(56, 189, 248, 0.5)");
+    }
+
+    const listEl = document.getElementById("reveal-results-list");
+    listEl.innerHTML = payload.results
+      .map(
+        (r) => `
       <div class="reveal-row" style="border-left-color: ${r.tier.color}">
         <div class="reveal-player-col">
           <span style="font-size:1.55rem;">${r.playerAvatar}</span>
@@ -1780,37 +2245,29 @@ function handleRoundRevealUI(payload) {
         </div>
       </div>
     `
-    )
-    .join("");
+      )
+      .join("");
 
-  if (payload.rarestGuessed) {
-    document.getElementById("spotlight-answer-title").textContent = `${payload.rarestGuessed.tier.emoji} ${payload.rarestGuessed.canonicalName} (Ditemukan oleh ${payload.rarestGuessed.finderName})`;
-    document.getElementById("spotlight-answer-fact").textContent =
-      payload.rarestGuessed.fact || payload.educationalNote;
-  } else {
-    document.getElementById("spotlight-answer-title").textContent = "💡 Catatan Wawasan Kategori Ini";
-    document.getElementById("spotlight-answer-fact").textContent = payload.educationalNote;
-  }
+    if (payload.rarestGuessed) {
+      document.getElementById("spotlight-answer-title").textContent = `${payload.rarestGuessed.tier.emoji} ${payload.rarestGuessed.canonicalName} (Ditemukan oleh ${payload.rarestGuessed.finderName})`;
+      document.getElementById("spotlight-answer-fact").textContent =
+        payload.rarestGuessed.fact || payload.educationalNote;
+    } else {
+      document.getElementById("spotlight-answer-title").textContent = "💡 Catatan Wawasan Kategori Ini";
+      document.getElementById("spotlight-answer-fact").textContent = payload.educationalNote;
+    }
 
-  const legContainer = document.getElementById("reveal-legendary-list");
-  legContainer.innerHTML = (payload.legendaryExamples || [])
-    .map(
-      (ex) => `
+    const legContainer = document.getElementById("reveal-legendary-list");
+    legContainer.innerHTML = (payload.legendaryExamples || [])
+      .map(
+        (ex) => `
       <div class="leg-item">
         <strong>🟡 ${escapeHtml(ex.name)} (+${formatMeters(ex.depthMeters)})</strong> — ${escapeHtml(ex.fact)}
       </div>
     `
-    )
-    .join("");
-
-  let secLeft = Math.round((payload.nextRoundInMs || 10000) / 1000);
-  const timerEl = document.getElementById("reveal-next-timer");
-  timerEl.textContent = secLeft;
-  revealCountdownInterval = setInterval(() => {
-    secLeft = Math.max(0, secLeft - 1);
-    timerEl.textContent = secLeft;
-    if (secLeft <= 0) clearInterval(revealCountdownInterval);
-  }, 1000);
+      )
+      .join("");
+  });
 }
 
 if (socket) {
@@ -1832,6 +2289,8 @@ function handleGameOverUI(payload) {
     ? `🏆 TANTANGAN HARIAN #${payload.dateKey}`
     : isCoop
     ? "🤝 EKSPEDISI TIM CO-OP SELESAI!"
+    : payload.gameMode === "tide"
+    ? "🌊 ARUS PASANG SELESAI!"
     : "🏁 PERTANDINGAN SELESAI!";
 
   if (isCoop) {
@@ -2094,3 +2553,108 @@ if (window.visualViewport) {
     document.body.classList.toggle("keyboard-open", isShrunk);
   });
 }
+
+
+// ============================================================================
+// OKSIGEN & SONAR PING (khas PALUNG.IO, hanya mode online)
+// ============================================================================
+function updateOxygenHud(room) {
+  const hud = document.getElementById("oxygen-hud");
+  if (!hud) return;
+  const myHudId = isLocalOfflineGame ? "me" : socket ? socket.id : null;
+  const me = myHudId && room && room.players ? room.players.find((p) => p.id === myHudId) : null;
+  if (!me || typeof me.oxygen !== "number") {
+    hud.classList.add("hidden");
+    return;
+  }
+  if (room.settings && room.settings.gameMode === "tide") {
+    hud.classList.add("hidden");
+    return;
+  }
+  hud.classList.remove("hidden");
+  const bar = document.getElementById("oxygen-bar");
+  bar.style.width = me.oxygen + "%";
+  bar.classList.toggle("low", me.oxygen <= 40 && me.oxygen > 15);
+  bar.classList.toggle("critical", me.oxygen <= 15);
+  document.getElementById("oxygen-value").textContent = me.oxygen + "%";
+  document.getElementById("sonar-ping-count").textContent = me.sonarPings;
+  document.getElementById("btn-sonar-ping").disabled = me.sonarPings <= 0 || me.oxygen < 15 || room.state !== "PLAYING" || me.readyInRound;
+}
+
+if (socket) {
+  socket.on("room:update", (room) => updateOxygenHud(room));
+  socket.on("round:start", () => {
+    const r = document.getElementById("sonar-ping-result");
+    if (r) r.textContent = "";
+  });
+  socket.on("round:reveal", (payload) => {
+    const mine = (payload.results || []).find((r) => r.playerId === socket.id);
+    if (mine && !(currentRoom && currentRoom.settings && currentRoom.settings.gameMode === "tide")) showOxygenToast(mine);
+  });
+}
+
+function showOxygenToast(mine) {
+  if (typeof mine.oxygenDelta !== "number") return;
+  const sign = mine.oxygenDelta > 0 ? "+" : "";
+  let msg = `🫧 Oksigen ${sign}${mine.oxygenDelta}% (sisa ${mine.oxygenAfter}%)`;
+  if (mine.suffocating) msg = "😮‍💨 Sesak napas! Hasil selam −30%. " + msg;
+  showToast(msg);
+}
+
+// Sinkronkan HUD dengan render layar (mode offline tidak memakai event room:update)
+const _origRenderGameScreen = renderGameScreen;
+renderGameScreen = function (room) {
+  _origRenderGameScreen(room);
+  updateOxygenHud(room);
+};
+const _origHandleRoundStartUI = handleRoundStartUI;
+handleRoundStartUI = function (payload) {
+  _origHandleRoundStartUI(payload);
+  const r = document.getElementById("sonar-ping-result");
+  if (r) r.textContent = "";
+  const inp = document.getElementById("input-answer");
+  const tide = currentRoom && currentRoom.settings && currentRoom.settings.gameMode === "tide";
+  if (inp) inp.placeholder = tide ? "Ketik jawaban yang paling umum dipilih..." : "Ketik jawaban paling langka...";
+};
+
+function showSonarResult(res) {
+  if (!res || !res.success) {
+    showToast(res ? res.message : "Sonar Ping tidak tersedia.");
+    return;
+  }
+  playSonarPing(880, 0.25);
+  triggerSonarRipple("rgba(56, 189, 248, 0.6)");
+  triggerHaptic(40);
+  document.getElementById("sonar-ping-result").textContent =
+    `📡 Ada jawaban ${res.tierName} berawalan "${res.firstLetter}" (${res.letters} huruf, ${res.words} kata)`;
+}
+
+document.getElementById("btn-sonar-ping").addEventListener("click", () => {
+  if (isLocalOfflineGame) {
+    const me = currentRoom.players.find((p) => p.id === "me");
+    const cat = currentRoom.selectedCategories[currentRoom.currentRound - 1];
+    if (!me || !cat || currentRoom.state !== "PLAYING") return;
+    if (me.readyInRound) return showSonarResult({ success: false, message: "Jawabanmu sudah terkunci." });
+    if (me.sonarUsedRound === currentRoom.currentRound) return showSonarResult({ success: false, message: "Sonar Ping hanya 1x per ronde." });
+    if (me.sonarPings <= 0) return showSonarResult({ success: false, message: "Sonar Ping sudah habis." });
+    if (me.oxygen < 15) return showSonarResult({ success: false, message: "Oksigen tidak cukup untuk Sonar Ping." });
+    const rare = cat.answers.filter((a) => a.score >= 65);
+    const pool = rare.length ? rare : [...cat.answers].sort((a, b) => b.score - a.score).slice(0, 3);
+    const target = pool[Math.floor(Math.random() * pool.length)];
+    const name = String(target.name).trim();
+    me.sonarPings -= 1;
+    me.sonarUsedRound = currentRoom.currentRound;
+    me.oxygen = Math.max(0, me.oxygen - 15);
+    renderGameScreen(currentRoom);
+    showSonarResult({
+      success: true,
+      firstLetter: name.charAt(0).toUpperCase(),
+      letters: name.replace(/[^\p{L}\p{N}]/gu, "").length,
+      words: name.split(/\s+/).length,
+      tierName: getTierInfo(target.score).name
+    });
+    return;
+  }
+  if (!socket) return;
+  socket.emit("round:sonar", showSonarResult);
+});

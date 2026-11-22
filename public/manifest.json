@@ -1,7 +1,7 @@
 {
   "name": "PALUNG.IO — Selam Wawasan Multiplayer",
   "short_name": "PALUNG.IO",
-  "description": "Game trivia kelangkaan multiplayer & edukasi terinspirasi Krillion.io. Semakin langka jawabanmu, semakin dalam kapal selammu!",
+  "description": "Game trivia kelangkaan multiplayer & edukasi khas Indonesia. Semakin langka jawabanmu, semakin dalam kapal selammu!",
   "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",

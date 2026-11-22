@@ -13,8 +13,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 
   <title>PALUNG.IO — Game Kuis Kelangkaan Multiplayer & Selam Wawasan Indonesia</title>
-  <meta name="description" content="Mainkan PALUNG.IO gratis! Game trivia kelangkaan multiplayer terinspirasi Krillion.io. Semakin langka jawabanmu, semakin dalam kapal selammu menembus Palung Mariana 7.000m!" />
-  <meta name="keywords" content="palung.io, palung io, game kuis multiplayer, krillion.io indonesia, game edukasi seru, tebak kata langka, game kapal selam" />
+  <meta name="description" content="Mainkan PALUNG.IO gratis! Game trivia kelangkaan multiplayer khas Indonesia. Semakin langka jawabanmu, semakin dalam kapal selammu menembus Palung Mariana 7.000m!" />
+  <meta name="keywords" content="palung.io, palung io, game kuis multiplayer, game edukasi seru, tebak kata langka, game kapal selam" />
   <meta name="robots" content="index, follow" />
 
   <!-- OpenGraph / Preview Kartu Saat Dibagikan di WhatsApp, Telegram, Discord & Sosmed -->
@@ -35,7 +35,7 @@
     "@type": "VideoGame",
     "name": "PALUNG.IO",
     "alternateName": ["Palung io", "Palung.io Game Selam Wawasan"],
-    "description": "Game trivia kelangkaan multiplayer & edukasi terinspirasi Krillion.io di mana jawaban yang semakin langka membawa kapal selam menyelam semakin dalam.",
+    "description": "Game trivia kelangkaan multiplayer & edukasi khas Indonesia di mana jawaban yang semakin langka membawa kapal selam menyelam semakin dalam.",
     "genre": ["Trivia", "Educational", "Multiplayer", "Word Game"],
     "playMode": ["MultiPlayer", "SinglePlayer", "CoOp"],
     "applicationCategory": "Game",
@@ -322,7 +322,8 @@
               <label>Mode Permainan</label>
               <select id="setting-gamemode">
                 <option value="competitive">⚔️ Kompetitif (Adu Kedalaman Pribadi)</option>
-                <option value="coop">🤝 Ekspedisi Co-op (Gabungkan Kedalaman Tim!)</option>
+                <option value="tide">🌊 Arus Pasang (Cocokkan Jawaban Paling Umum!)</option>
+                  <option value="coop">🤝 Ekspedisi Co-op (Gabungkan Kedalaman Tim!)</option>
               </select>
             </div>
 
@@ -342,7 +343,7 @@
                 <label>Jumlah Ronde</label>
                 <select id="setting-rounds">
                   <option value="5">5 Ronde (Cepat)</option>
-                  <option value="7" selected>7 Ronde (Standar Krillion)</option>
+                  <option value="7" selected>7 Ronde (Standar)</option>
                 </select>
               </div>
 
@@ -476,6 +477,20 @@
               <!-- Pesan Umpan Balik Sonar (Valid / Tidak Valid) -->
               <div id="sonar-feedback" class="sonar-feedback"></div>
 
+              <!-- HUD Oksigen & Sonar Ping (khas PALUNG.IO, mode online) -->
+              <div id="oxygen-hud" class="oxygen-hud hidden">
+                <div class="oxygen-label">
+                  <span>🫧 Oksigen</span>
+                  <span id="oxygen-value">100%</span>
+                </div>
+                <div class="oxygen-track"><div id="oxygen-bar" class="oxygen-bar"></div></div>
+                <button type="button" class="btn-sonar-ping" id="btn-sonar-ping">
+                  📡 Sonar Ping (−15 O₂ • Sisa: <span id="sonar-ping-count">2</span>)
+                </button>
+                <div id="sonar-ping-result" class="sonar-ping-result"></div>
+                <small class="oxygen-tip">Jawaban umum menguras oksigen, jawaban langka mengisinya. Oksigen habis = hasil selam −30%.</small>
+              </div>
+
               <!-- Panel Saat Jawaban Sudah Terkunci -->
               <div id="locked-answer-panel" class="locked-panel hidden">
                 <div class="locked-badge">✅ JAWABAN TERKUNCI DI SONAR</div>
@@ -496,6 +511,26 @@
                   <button type="button" class="react-btn" data-emoji="💥">💥</button>
                   <button type="button" class="react-btn" data-emoji="🐙">🐙</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- AREA FASE 1.5: ANIMASI GROUP DESCEND ALA KRILLION.IO -->
+            <div id="phase-descend" class="stage-card glass-card descend-stage-card hidden">
+              <div class="descend-hud-top">
+                <div class="descend-hud-left">
+                  <span class="descend-kicker">🌊 MENYELAM KE PALUNG...</span>
+                  <div class="descend-zone-badge" id="descend-zone-badge">☀️ ZONA MATAHARI</div>
+                </div>
+                <div class="descend-hud-center">
+                  <div class="descend-odometer" id="descend-depth-counter">+0m</div>
+                  <div class="descend-answer-pill" id="descend-my-answer-pill">Menghitung sonar...</div>
+                </div>
+                <button type="button" class="btn-small btn-skip-descend" id="btn-skip-descend" title="Langsung lihat hasil ronde">
+                  ⏩ Lewati
+                </button>
+              </div>
+              <div class="descend-canvas-wrap">
+                <canvas id="descend-canvas"></canvas>
               </div>
             </div>
 
@@ -544,7 +579,7 @@
           <!-- Podium / Klasemen Akhir -->
           <div id="gameover-podium" class="podium-grid"></div>
 
-          <!-- Kartu Shareable (Mirip Wordle / Krillion.io) -->
+          <!-- Kartu Shareable -->
           <div class="share-section">
             <div class="share-card-preview">
               <h3>📲 Kartu Selammu (Siap Bagikan ke Teman!)</h3>
@@ -699,5 +734,6 @@ Pesut Mahakam | 95 | Lumba-lumba air tawar langka di Sungai Mahakam"></textarea>
   <script src="/categories-bundle.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
+<script src="/progress.js"></script>
 </body>
 </html>

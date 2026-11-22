@@ -8,3 +8,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 22
+      # Isi DATA_DIR dengan mount path persistent disk (plan berbayar) agar statistik awet:
+      # - key: DATA_DIR
+      #   value: /var/data

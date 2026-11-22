@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
@@ -30,29 +30,27 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Penyimpanan Statistik Kelangkaan Dinamis & Leaderboard Harian
-const STATS_FILE = path.join(__dirname, "data", "runtime_stats.json");
-let runtimeData = {
-  answerCounts: {}, // { "categoryId::canonicalName": count }
-  dailyLeaderboard: {}, // { "YYYY-MM-DD": [ { name, avatar, totalDepth, tiers, timestamp } ] }
-  customCategories: []
-};
+// Penyimpanan Statistik Kelangkaan Dinamis & Leaderboard Harian (SQLite / JSON fallback)
+const storage = require("./storage");
+let runtimeData = storage.load();
+console.log("[storage] backend:", storage.backend);
 
-try {
-  if (fs.existsSync(STATS_FILE)) {
-    runtimeData = JSON.parse(fs.readFileSync(STATS_FILE, "utf8"));
-  }
-} catch (err) {
-  console.error("Gagal memuat runtime_stats.json, membuat baru:", err.message);
-}
-
+let saveTimer = null;
 function saveRuntimeData() {
-  try {
-    fs.writeFileSync(STATS_FILE, JSON.stringify(runtimeData, null, 2), "utf8");
-  } catch (err) {
-    console.error("Gagal menyimpan runtime_stats.json:", err.message);
-  }
+  // Gabungkan penulisan beruntun agar tidak membebani disk
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    storage.save(runtimeData);
+  }, 500);
 }
+function flushRuntimeData() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  storage.save(runtimeData);
+}
+process.on("SIGTERM", () => { flushRuntimeData(); process.exit(0); });
+process.on("SIGINT", () => { flushRuntimeData(); process.exit(0); });
 
 function getAllCategories() {
   return [...CATEGORIES, ...(runtimeData.customCategories || [])];
@@ -116,7 +114,7 @@ function getTierInfo(score) {
     return {
       id: "LEGENDA",
       name: "LEGENDA PALUNG",
-      subtitle: "1 in a Krillion!",
+      subtitle: "Sedalam Palung, Selangka Mutiara!",
       emoji: "🟡",
       color: "#facc15"
     };
@@ -254,7 +252,7 @@ const BOT_PROFILES = [
   }
 ];
 
-function pickBotAnswer(bot, category) {
+function pickBotAnswer(bot, category, tide = false) {
   const answers = category.answers;
   let pool = answers;
 
@@ -266,6 +264,10 @@ function pickBotAnswer(bot, category) {
     pool = answers.filter((a) => a.score >= 38 && a.score <= 94);
   }
 
+  if (tide) {
+    // Arus Pasang: bot mengikuti arus, memilih jawaban umum
+    pool = answers.filter((a) => a.score <= 45);
+  }
   if (!pool || pool.length === 0) pool = answers;
   const chosen = pool[Math.floor(Math.random() * pool.length)];
   return computeDynamicScore(category.id, chosen);
@@ -392,6 +394,9 @@ function addPlayerToRoom(room, { id, name, avatar, isBot = false, botProfile = n
     totalDepth: 0,
     roundDepth: 0,
     readyInRound: false,
+    oxygen: 100, // Oksigen kapal selam (0-100): jawaban umum menguras, jawaban langka mengisi
+    sonarPings: 2, // Sonar Ping: bocoran huruf awal jawaban langka (2x per game)
+    sonarUsedRound: 0,
     rerollsLeft: 1, // Fitur Sonar Cadangan: 1x kesempatan ganti jawaban per game!
     historyTiers: [], // Array emoji tier tiap ronde
     bestAnswer: null,
@@ -402,6 +407,10 @@ function addPlayerToRoom(room, { id, name, avatar, isBot = false, botProfile = n
   room.players.push(player);
   return player;
 }
+
+const OXYGEN_MISS_PENALTY = 30;
+const OXYGEN_BY_TIER = { PLANKTON: -12, KARANG: -4, ABISAL: 6, LEGENDA: 12 };
+const SONAR_PING_COST = 15;
 
 function clearRoomTimers(room) {
   if (room.timerInterval) {
@@ -453,6 +462,8 @@ function serializeRoom(room) {
       roundDepth: p.roundDepth,
       readyInRound: p.readyInRound,
       rerollsLeft: p.rerollsLeft,
+      oxygen: p.oxygen,
+      sonarPings: p.sonarPings,
       historyTiers: p.historyTiers,
       bestAnswer: p.bestAnswer,
       collisionsCount: p.collisionsCount,
@@ -494,6 +505,9 @@ function startGame(room) {
     p.roundDepth = 0;
     p.readyInRound = false;
     p.rerollsLeft = 1;
+    p.oxygen = 100;
+    p.sonarPings = 2;
+    p.sonarUsedRound = 0;
     p.historyTiers = [];
     p.bestAnswer = null;
     p.collisionsCount = 0;
@@ -557,7 +571,7 @@ function startNextRound(room) {
       const delay = Math.floor(minDelay + Math.random() * Math.max(1000, maxDelay - minDelay));
       const t = setTimeout(() => {
         if (room.state !== "PLAYING") return;
-        const match = pickBotAnswer(bot.botProfile || { style: "safe" }, currentCat);
+        const match = pickBotAnswer(bot.botProfile || { style: "safe" }, currentCat, room.settings.gameMode === "tide");
         room.roundSubmissions[bot.id] = {
           rawInput: match.canonicalName,
           match,
@@ -613,8 +627,9 @@ function endRoundAndReveal(room) {
   const highTierSubmissions = Object.entries(room.roundSubmissions).filter(
     ([, sub]) => sub && sub.match && sub.match.baseScore >= 65 && canonicalCounts[sub.match.canonicalName] === 1
   );
+  const isTide = room.settings.gameMode === "tide";
   let soleExplorerPlayerId = null;
-  if (room.players.length >= 2 && highTierSubmissions.length > 0) {
+  if (!isTide && room.players.length >= 2 && highTierSubmissions.length > 0) {
     // Berikan badge Penemu Tunggal kepada jawaban unik dengan skor tertinggi di ronde ini
     highTierSubmissions.sort((a, b) => b[1].match.baseScore - a[1].match.baseScore);
     soleExplorerPlayerId = highTierSubmissions[0][0];
@@ -626,6 +641,8 @@ function endRoundAndReveal(room) {
   room.players.forEach((p) => {
     const sub = room.roundSubmissions[p.id];
     if (!sub || !sub.match) {
+      const o0 = p.oxygen;
+      p.oxygen = Math.max(0, p.oxygen - OXYGEN_MISS_PENALTY);
       p.roundDepth = 0;
       p.historyTiers.push("⚫");
       results.push({
@@ -648,6 +665,9 @@ function endRoundAndReveal(room) {
         },
         isCollision: false,
         isSoleExplorer: false,
+        oxygenDelta: p.oxygen - o0,
+        oxygenAfter: p.oxygen,
+        suffocating: false,
         fact: ""
       });
       return;
@@ -662,14 +682,21 @@ function endRoundAndReveal(room) {
     }
 
     const isCollision =
-      room.settings.collisionRule &&
+      (isTide || room.settings.collisionRule) &&
       room.players.length >= 2 &&
       canonicalCounts[canonicalName] > 1;
 
     const isSoleExplorer = p.id === soleExplorerPlayerId && !isCollision;
 
     let depthGained = baseScore * 10; // 1 poin = 10 meter
-    if (isCollision) {
+    if (isTide) {
+      // Arus Pasang: makin umum jawabanmu, makin dalam; sama dengan pemain lain = bonus 50%
+      depthGained = (100 - baseScore) * 10 + 100;
+      if (isCollision) {
+        depthGained = Math.round(depthGained * 1.5);
+        p.collisionsCount += 1;
+      }
+    } else if (isCollision) {
       depthGained = Math.round(depthGained * 0.5); // Penalti Tabrakan 50%!
       p.collisionsCount += 1;
     }
@@ -677,6 +704,14 @@ function endRoundAndReveal(room) {
       depthGained += 150; // Bonus +150m Penemu Tunggal!
       p.uniqueBonusCount += 1;
     }
+
+    // Sistem Oksigen: kehabisan napas memangkas hasil selam 30%
+    const suffocating = !isTide && p.oxygen <= 0;
+    if (suffocating) depthGained = Math.round(depthGained * 0.7);
+    const o0 = p.oxygen;
+    let oxDelta = isTide ? 0 : OXYGEN_BY_TIER[tier.id] || 0;
+    if (isCollision && !isTide) oxDelta -= 10;
+    p.oxygen = Math.max(0, Math.min(100, p.oxygen + oxDelta));
 
     p.roundDepth = depthGained;
     p.totalDepth += depthGained;
@@ -718,6 +753,9 @@ function endRoundAndReveal(room) {
       isCollision,
       collisionWithCount: canonicalCounts[canonicalName],
       isSoleExplorer,
+      oxygenDelta: p.oxygen - o0,
+      oxygenAfter: p.oxygen,
+      suffocating,
       fact
     });
   });
@@ -746,7 +784,7 @@ function endRoundAndReveal(room) {
     results,
     rarestGuessed,
     legendaryExamples,
-    nextRoundInMs: 10500
+    nextRoundInMs: 13500
   };
 
   room.roundHistory.push(revealPayload);
@@ -756,7 +794,7 @@ function endRoundAndReveal(room) {
 
   room.revealTimeout = setTimeout(() => {
     startNextRound(room);
-  }, 10500);
+  }, 13500);
 }
 
 function finishGame(room) {
@@ -887,33 +925,51 @@ app.get("/api/categories", (req, res) => {
   res.json({ categories: list });
 });
 
+const customRate = new Map(); // ip -> [timestamps]
+function clip(v, n) { return String(v == null ? "" : v).replace(/[<>]/g, "").trim().slice(0, n); }
+
 app.post("/api/categories/custom", (req, res) => {
+  const ip = req.ip || "x";
+  const now = Date.now();
+  const hits = (customRate.get(ip) || []).filter((t) => now - t < 3600000);
+  if (hits.length >= 5) {
+    return res.status(429).json({ error: "Terlalu banyak kategori dibuat. Coba lagi dalam satu jam." });
+  }
   const { title, theme, hint, educationalNote, answers } = req.body || {};
   if (!title || !Array.isArray(answers) || answers.length < 4) {
     return res.status(400).json({
       error: "Masukkan judul kategori dan minimal 4 jawaban beserta skor kelangkaannya."
     });
   }
+  if ((runtimeData.customCategories || []).length >= 500) {
+    return res.status(503).json({ error: "Workshop sedang penuh." });
+  }
 
-  const id = "custom-" + Date.now();
+  const id = "custom-" + now + "-" + Math.random().toString(36).slice(2, 6);
   const cleanAnswers = answers
-    .filter((a) => a && a.name && a.name.trim())
+    .slice(0, 100)
+    .filter((a) => a && a.name && String(a.name).trim())
     .map((a) => ({
-      name: a.name.trim(),
-      aliases: Array.isArray(a.aliases) ? a.aliases : [],
+      name: clip(a.name, 60),
+      aliases: Array.isArray(a.aliases) ? a.aliases.slice(0, 10).map((x) => clip(x, 60)).filter(Boolean) : [],
       score: Math.min(100, Math.max(10, Number(a.score) || 50)),
-      fact: (a.fact || "Jawaban kustom dari komunitas Palung.io!").trim()
+      fact: clip(a.fact || "Jawaban kustom dari komunitas Palung.io!", 300)
     }));
+  if (cleanAnswers.length < 4) {
+    return res.status(400).json({ error: "Minimal 4 jawaban valid." });
+  }
 
   const newCat = {
     id,
-    title: title.trim(),
-    theme: theme || "umum",
-    hint: (hint || "Kategori kreasi komunitas Palung.io!").trim(),
-    educationalNote: (educationalNote || "Dibuat oleh pemain di Workshop Palung.io.").trim(),
+    title: clip(title, 80),
+    theme: clip(theme || "umum", 30),
+    hint: clip(hint || "Kategori kreasi komunitas Palung.io!", 200),
+    educationalNote: clip(educationalNote || "Dibuat oleh pemain di Workshop Palung.io.", 300),
     answers: cleanAnswers
   };
 
+  hits.push(now);
+  customRate.set(ip, hits);
   runtimeData.customCategories.push(newCat);
   saveRuntimeData();
 
@@ -1212,6 +1268,43 @@ io.on("connection", (socket) => {
     if (typeof callback === "function") {
       callback({ success: true, rerollsLeft: player.rerollsLeft });
     }
+  });
+
+  // 8b. Sonar Ping: bocoran huruf awal salah satu jawaban langka (mengorbankan oksigen)
+  socket.on("round:sonar", (callback) => {
+    const reply = typeof callback === "function" ? callback : () => {};
+    if (!currentRoomCode) return reply({ success: false, message: "Tidak ada ruangan." });
+    const room = rooms.get(currentRoomCode);
+    if (!room || room.state !== "PLAYING") return reply({ success: false, message: "Sonar hanya aktif saat ronde berjalan." });
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return reply({ success: false, message: "Pemain tidak ditemukan." });
+    if (room.settings.gameMode === "tide") return reply({ success: false, message: "Sonar Ping tidak aktif di mode Arus Pasang." });
+    if (player.readyInRound) return reply({ success: false, message: "Jawabanmu sudah terkunci." });
+    if (player.sonarUsedRound === room.currentRound) return reply({ success: false, message: "Sonar Ping hanya 1x per ronde." });
+    if (player.sonarPings <= 0) return reply({ success: false, message: "Sonar Ping sudah habis." });
+    if (player.oxygen < SONAR_PING_COST) return reply({ success: false, message: "Oksigen tidak cukup untuk Sonar Ping." });
+
+    const cat = room.selectedCategories[room.currentRound - 1];
+    if (!cat) return reply({ success: false, message: "Kategori tidak ditemukan." });
+    const rare = cat.answers.filter((a) => a.score >= 65);
+    const pool = rare.length ? rare : [...cat.answers].sort((a, b) => b.score - a.score).slice(0, 3);
+    const target = pool[Math.floor(Math.random() * pool.length)];
+    const name = String(target.name).trim();
+
+    player.sonarPings -= 1;
+    player.sonarUsedRound = room.currentRound;
+    player.oxygen = Math.max(0, player.oxygen - SONAR_PING_COST);
+    broadcastRoomUpdate(room);
+
+    reply({
+      success: true,
+      firstLetter: name.charAt(0).toUpperCase(),
+      letters: name.replace(/[^\p{L}\p{N}]/gu, "").length,
+      words: name.split(/\s+/).length,
+      tierName: getTierInfo(target.score).name,
+      sonarPings: player.sonarPings,
+      oxygen: player.oxygen
+    });
   });
 
   // 9. Kirim Reaksi Gelembung Emoji atau Pesan Taktis di Arena
