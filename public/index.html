@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#040d1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PALUNG.IO" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <title>PALUNG.IO — Game Kuis Kelangkaan Multiplayer & Selam Wawasan Indonesia</title>
+  <meta name="description" content="Mainkan PALUNG.IO gratis! Game trivia kelangkaan multiplayer terinspirasi Krillion.io. Semakin langka jawabanmu, semakin dalam kapal selammu menembus Palung Mariana 7.000m!" />
+  <meta name="keywords" content="palung.io, palung io, game kuis multiplayer, krillion.io indonesia, game edukasi seru, tebak kata langka, game kapal selam" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- OpenGraph / Preview Kartu Saat Dibagikan di WhatsApp, Telegram, Discord & Sosmed -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="PALUNG.IO" />
+  <meta property="og:title" content="PALUNG.IO — Selam Wawasan, Cari Jawaban Paling Langka!" />
+  <meta property="og:description" content="Semakin langka jawabanmu, semakin dalam kapal selammu! Main bareng teman secara online maupun offline di HP & Browser." />
+  <meta property="og:image" content="/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="PALUNG.IO — Game Trivia Kelangkaan Multiplayer" />
+  <meta name="twitter:description" content="Adu wawasan anti-mainstream dan selam hingga 7.000m ke dasar Palung Mariana!" />
+  <meta name="twitter:image" content="/icons/icon-512.png" />
+
+  <!-- Schema.org JSON-LD Agar Mudah Muncul di Peringkat Atas Pencarian Google -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "PALUNG.IO",
+    "alternateName": ["Palung io", "Palung.io Game Selam Wawasan"],
+    "description": "Game trivia kelangkaan multiplayer & edukasi terinspirasi Krillion.io di mana jawaban yang semakin langka membawa kapal selam menyelam semakin dalam.",
+    "genre": ["Trivia", "Educational", "Multiplayer", "Word Game"],
+    "playMode": ["MultiPlayer", "SinglePlayer", "CoOp"],
+    "applicationCategory": "Game",
+    "operatingSystem": "Web, Android, iOS",
+    "inLanguage": "id",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "IDR"
+    }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Latar Belakang Samudra Interaktif -->
+  <canvas id="ocean-canvas"></canvas>
+
+  <!-- Navigasi Atas -->
+  <header class="topbar">
+    <div class="brand" id="btn-home-logo" title="Kembali ke Beranda">
+      <div class="brand-icon">🤿</div>
+      <div class="brand-text">
+        <span class="brand-title">PALUNG<span class="brand-dot">.IO</span></span>
+        <span class="brand-sub">Mobile & Web • Selam Wawasan!</span>
+      </div>
+    </div>
+
+    <div class="topbar-Right">
+      <div class="depth-zone-pill" id="connection-mode-pill" title="Status Mesin Game (Online Multiplayer / Offline Mandiri)">
+        <span class="zone-dot" id="conn-dot"></span>
+        <span id="conn-text">Mode Mandiri</span>
+      </div>
+      <div class="depth-zone-pill hide-on-small" id="ambient-zone-indicator">
+        <span id="ambient-zone-text">Zona Permukaan (0m)</span>
+      </div>
+      <button class="icon-btn btn-highlight-mobile hide-on-small" id="btn-open-mobile-hub" title="Buka di HP / Scan QR / Install App">
+        📲 Main di HP / QR
+      </button>
+      <button class="icon-btn hide-on-small" id="btn-toggle-phone-frame" title="Simulasi Tampilan Layar HP di Komputer">
+        📱 Mode Layar HP
+      </button>
+      <button class="icon-btn hide-on-small" id="btn-open-workshop" title="Buat Kategori Baru (Workshop)">
+        ➕ Buat Kategori
+      </button>
+      <button class="icon-btn" id="btn-sound-toggle" title="Backsound Samudra, Suara Sonar & Getar Haptic On/Off">
+        🎵🔊
+      </button>
+    </div>
+  </header>
+
+  <!-- Banner Install PWA (Muncul Otomatis jika Browser Mendukung Install App) -->
+  <div id="pwa-install-banner" class="pwa-install-banner hidden">
+    <div class="pwa-banner-left">
+      <img src="/icons/icon-192.png" alt="PALUNG.IO" class="pwa-mini-icon" />
+      <div>
+        <strong>Install Aplikasi PALUNG.IO di HP-mu!</strong>
+        <span>Bisa dimainkan layar penuh & tetap jalan walau tanpa internet (Offline Mode).</span>
+      </div>
+    </div>
+    <div class="pwa-banner-actions">
+      <button class="btn-primary btn-sm" id="btn-install-pwa-now">⬇ Install App</button>
+      <button class="icon-btn" id="btn-dismiss-pwa">✕</button>
+    </div>
+  </div>
+
+  <!-- Wrapper Simulator Frame HP (Aktif bila user klik "Mode Layar HP" di Desktop) -->
+  <div id="phone-frame-wrapper" class="phone-frame-wrapper">
+    <div class="phone-notch">
+      <span class="notch-speaker"></span>
+      <span class="notch-cam"></span>
+    </div>
+
+    <!-- Kontainer Utama -->
+    <main class="app-container">
+
+      <!-- ==================== LAYAR 1: BERANDA (HOME HUB) ==================== -->
+      <section id="screen-home" class="screen active">
+        <div class="hero-banner">
+          <div class="hero-badge">🌊 EDISI MOBILE & MULTIPLAYER • BISA ONLINE MAUPUN OFFLINE</div>
+          <h1 class="hero-title">Semakin <span class="text-gradient-gold">Langka</span> Jawabanmu,<br/>Semakin <span class="text-gradient-cyan">Dalam</span> Kapal Selammu!</h1>
+          <p class="hero-desc">
+            Pertanyaan terbuka dengan puluhan jawaban benar. Jawaban pasaran hanya menyelam dangkal di <strong>Zona Plankton</strong>, tapi jawaban anti-mainstream membawamu menembus <strong>Palung Mariana (7.000m)</strong> sambil membuka fakta sains & budaya unik!
+          </p>
+
+          <!-- Bar Indikator Tier Kelangkaan -->
+          <div class="tier-showcase">
+            <div class="tier-chip tier-plankton">
+              <span class="t-emoji">🟢</span>
+              <div>
+                <strong>PLANKTON (Umum)</strong>
+                <small>+100m s/d 340m</small>
+              </div>
+            </div>
+            <div class="tier-chip tier-karang">
+              <span class="t-emoji">🔵</span>
+              <div>
+                <strong>KARANG (Unik)</strong>
+                <small>+350m s/d 640m</small>
+              </div>
+            </div>
+            <div class="tier-chip tier-abisal">
+              <span class="t-emoji">🟣</span>
+              <div>
+                <strong>ABISAL (Langka)</strong>
+                <small>+650m s/d 880m</small>
+              </div>
+            </div>
+            <div class="tier-chip tier-legenda">
+              <span class="t-emoji">🟡</span>
+              <div>
+                <strong>LEGENDA PALUNG</strong>
+                <small>+890m s/d 1.000m</small>
+              </div>
+            </div>
+            <div class="tier-chip tier-collision">
+              <span class="t-emoji">💥</span>
+              <div>
+                <strong>AWAS TABRAKAN!</strong>
+                <small>Jawaban sama = -50%</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <!-- Kartu Profil Kapten Kapal Selam -->
+          <div class="glass-card profile-card">
+            <h2 class="card-title">⚓ Identitas Penyelam</h2>
+            <div class="form-group">
+              <label for="input-player-name">Nama Kapten</label>
+              <input type="text" id="input-player-name" maxlength="20" placeholder="Ketik namamu..." value="Kapten Samudra" />
+            </div>
+
+            <div class="form-group">
+              <label>Pilih Kapal Selam / Maskot Laut</label>
+              <div class="avatar-grid" id="avatar-selector">
+                <button type="button" class="avatar-btn selected" data-avatar="🤿">🤿</button>
+                <button type="button" class="avatar-btn" data-avatar="🐙">🐙</button>
+                <button type="button" class="avatar-btn" data-avatar="🦈">🦈</button>
+                <button type="button" class="avatar-btn" data-avatar="🐳">🐳</button>
+                <button type="button" class="avatar-btn" data-avatar="🪼">🪼</button>
+                <button type="button" class="avatar-btn" data-avatar="🐬">🐬</button>
+                <button type="button" class="avatar-btn" data-avatar="🦀">🦀</button>
+                <button type="button" class="avatar-btn" data-avatar="🐡">🐡</button>
+              </div>
+            </div>
+
+            <div class="stats-mini-box">
+              <div>📚 <strong id="stat-total-categories">20</strong> Kategori Kurasi</div>
+              <div>💎 <strong id="stat-total-answers">850+</strong> Fakta & Jawaban</div>
+            </div>
+          </div>
+
+          <!-- Kartu Pilihan Mode Permainan -->
+          <div class="glass-card modes-card">
+            <h2 class="card-title">🚀 Pilih Ekspedisi Penyelaman</h2>
+
+            <div class="mode-actions">
+              <!-- Mode 1: Quick Match Arena Multiplayer -->
+              <button class="mode-btn mode-quick" id="btn-quick-match">
+                <div class="mode-icon">⚡</div>
+                <div class="mode-info">
+                  <div class="mode-head">
+                    <strong>ARENA CEPAT (Multiplayer + AI Bot)</strong>
+                    <span class="badge-hot">PALING SERU</span>
+                  </div>
+                  <p>Langsung terjun ke arena bersama pemain lain & Bot Penyelam pintar. Jalan online maupun offline!</p>
+                </div>
+              </button>
+
+              <!-- Mode 2: Tantangan Harian Global -->
+              <button class="mode-btn mode-daily" id="btn-daily-challenge">
+                <div class="mode-icon">🏆</div>
+                <div class="mode-info">
+                  <div class="mode-head">
+                    <strong>TANTANGAN HARIAN (Daily Dive)</strong>
+                    <span class="badge-daily" id="badge-today-date">Hari Ini</span>
+                  </div>
+                  <p>7 kategori tersinkronisasi hari ini untuk semua pemain. Raih rekor & bagikan Kartu Selammu!</p>
+                </div>
+              </button>
+
+              <!-- Mode 3: Mode Offline Mandiri (100% On-Device Tanpa Sinyal) -->
+              <button class="mode-btn mode-offline" id="btn-offline-solo">
+                <div class="mode-icon">📱</div>
+                <div class="mode-info">
+                  <div class="mode-head">
+                    <strong>MODE MANDIRI HP (Offline vs 3 AI Bot)</strong>
+                    <span class="badge-offline">TANPA KUOTA</span>
+                  </div>
+                  <p>Berjalan 100% di dalam HP tanpa perlu koneksi server. Cocok saat di perjalanan atau latihan!</p>
+                </div>
+              </button>
+
+              <!-- Mode 4: Buat Room Party Bareng Teman -->
+              <div class="party-split">
+                <button class="mode-btn mode-create" id="btn-create-room">
+                  <div class="mode-icon">🚢</div>
+                  <div class="mode-info">
+                    <strong>Buat Room Party</strong>
+                    <p>Undang teman via Kode 4 Huruf, QR Code Wi-Fi, atau Share WhatsApp.</p>
+                  </div>
+                </button>
+
+                <div class="join-code-box">
+                  <label>Punya Kode Room Teman?</label>
+                  <div class="join-input-row">
+                    <input type="text" id="input-room-code" maxlength="4" placeholder="KODE" />
+                    <button class="btn-primary" id="btn-join-room">Gabung</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kartu Leaderboard Harian & Room Publik Aktif -->
+          <div class="glass-card community-card">
+            <div class="tabs-header">
+              <button class="tab-btn active" data-tab="tab-leaderboard">🏆 Top Harian</button>
+              <button class="tab-btn" data-tab="tab-public-rooms">🌐 Room Terbuka</button>
+            </div>
+
+            <div id="tab-leaderboard" class="tab-content active">
+              <p class="tab-subtitle">Penyelam terdalam di Tantangan Harian hari ini:</p>
+              <div id="daily-leaderboard-list" class="leaderboard-list">
+                <div class="empty-state">Belum ada penyelaman hari ini. Jadilah yang pertama menembus Palung!</div>
+              </div>
+            </div>
+
+            <div id="tab-public-rooms" class="tab-content">
+              <p class="tab-subtitle">Room publik yang sedang menunggu penyelam:</p>
+              <div id="public-rooms-list" class="public-rooms-list">
+                <div class="empty-state">Belum ada room publik di lobby. Klik "Buat Room Party" atau "Arena Cepat"!</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== LAYAR 2: LOBBY MULTIPLAYER ==================== -->
+      <section id="screen-lobby" class="screen">
+        <div class="lobby-header glass-card">
+          <div class="lobby-room-badge">
+            <span class="room-label">KODE ROOM PARTY</span>
+            <div class="room-code-wrapper">
+              <span id="lobby-room-code" class="room-code-big">ABCD</span>
+              <button class="btn-small" id="btn-copy-code" title="Salin Kode Room">📋 Salin</button>
+              <button class="btn-small btn-qr-invite" id="btn-qr-room" title="Tampilkan QR & Share ke WhatsApp">📲 QR / WA</button>
+            </div>
+          </div>
+
+          <div class="lobby-status-info">
+            <h2 id="lobby-title">Kapal Selam Siap Meluncur!</h2>
+            <p id="lobby-subtitle">Bagikan kode 4 huruf atau scan QR Code agar temanmu langsung masuk ke room ini dari HP mereka.</p>
+          </div>
+
+          <div class="lobby-top-actions">
+            <button class="btn-secondary" id="btn-leave-lobby">⬅ Keluar</button>
+            <button class="btn-start-big" id="btn-start-game">🌊 MULAI MENYELAM!</button>
+          </div>
+        </div>
+
+        <div class="lobby-grid">
+          <!-- Daftar Penyelam di dalam Room -->
+          <div class="glass-card lobby-players-card">
+            <div class="card-header-flex">
+              <h3>🤿 Kru Penyelam di Room (<span id="lobby-player-count">1</span>/8)</h3>
+              <button class="btn-add-bot" id="btn-add-bot">🤖 + Tambah AI Bot</button>
+            </div>
+
+            <div id="lobby-players-list" class="lobby-players-grid"></div>
+          </div>
+
+          <!-- Pengaturan Ekspedisi -->
+          <div class="glass-card lobby-settings-card">
+            <h3>⚙️ Pengaturan Ekspedisi</h3>
+
+            <div class="setting-item">
+              <label>Mode Permainan</label>
+              <select id="setting-gamemode">
+                <option value="competitive">⚔️ Kompetitif (Adu Kedalaman Pribadi)</option>
+                <option value="coop">🤝 Ekspedisi Co-op (Gabungkan Kedalaman Tim!)</option>
+              </select>
+            </div>
+
+            <div class="setting-item">
+              <label>Tema Kategori Wawasan</label>
+              <select id="setting-theme">
+                <option value="all">🌍 Semua Topik (Sains, Nusantara, Geografi, Umum)</option>
+                <option value="sains">🧬 Sains, Biologi, Antariksa & Alam</option>
+                <option value="nusantara">🇮🇩 Budaya, Kuliner, Pahlawan & Geografi Nusantara</option>
+                <option value="geografi">🗺️ Geografi, Negara, Sungai & Danau Dunia</option>
+                <option value="umum">💡 Pengetahuan Umum, Profesi, Olahraga & Teknologi</option>
+              </select>
+            </div>
+
+            <div class="setting-row-2">
+              <div class="setting-item">
+                <label>Jumlah Ronde</label>
+                <select id="setting-rounds">
+                  <option value="5">5 Ronde (Cepat)</option>
+                  <option value="7" selected>7 Ronde (Standar Krillion)</option>
+                </select>
+              </div>
+
+              <div class="setting-item">
+                <label>Waktu per Ronde</label>
+                <select id="setting-duration">
+                  <option value="20">20 Detik (Kilat)</option>
+                  <option value="25" selected>25 Detik (Ideal)</option>
+                  <option value="35">35 Detik (Santai)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="setting-item checkbox-setting">
+              <label class="switch-label">
+                <input type="checkbox" id="setting-collision" checked />
+                <span>💥 <strong>Aturan Tabrakan Kapal Selam</strong> (Jika 2+ pemain menjawab kata yang sama persis, poin kedalaman terpotong 50%!)</span>
+              </label>
+            </div>
+
+            <div class="lobby-tips-box">
+              <strong>💡 Tips Strategi Palung.io:</strong>
+              <ul>
+                <li>Jangan langsung mengetik jawaban yang paling mudah terlintas di kepala agar tidak terjebak di <em>Zona Plankton</em> atau bertabrakan dengan temanmu!</li>
+                <li>Setiap pemain punya <strong>1x Sonar Cadangan</strong> per permainan untuk mengganti jawaban yang sudah terkunci jika tiba-tiba terpikir jawaban yang lebih langka!</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== LAYAR 3: ARENA PERMAINAN & REVEAL ==================== -->
+      <section id="screen-game" class="screen">
+        <!-- Radar Bar Ringkas Khusus Layar HP (Agar Pertanyaan & Input Tetap di Atas Saat Keyboard Muncul) -->
+        <div class="mobile-compact-radar glass-card" id="mobile-compact-radar">
+          <div class="mcr-top">
+            <span class="round-pill" id="mobile-round-pill">Ronde 1/7</span>
+            <span class="mcr-depth" id="mobile-my-depth">⚓ 0m</span>
+          </div>
+          <div class="mcr-subs" id="mobile-subs-strip"></div>
+        </div>
+
+        <div class="game-layout">
+          <!-- Kolom Kiri: Visualisasi Palung Laut & Kapal Selam Live -->
+          <aside class="trench-sidebar glass-card">
+            <div class="trench-header">
+              <div>
+                <span class="trench-label">PETA KEDALAMAN LIVE</span>
+                <h3 id="trench-room-title">Palung Mariana (7.000m)</h3>
+              </div>
+              <span class="round-pill" id="game-round-indicator">Ronde 1/7</span>
+            </div>
+
+            <!-- Trek Visualisasi Kapal Selam Menyelam -->
+            <div class="trench-visualizer" id="trench-visualizer">
+              <div class="trench-zones-bg">
+                <div class="t-zone z-sunlight"><span>0m • Zona Matahari</span></div>
+                <div class="t-zone z-twilight"><span>1.500m • Zona Senja</span></div>
+                <div class="t-zone z-midnight"><span>3.500m • Zona Tengah Malam</span></div>
+                <div class="t-zone z-abyss"><span>5.500m • Zona Abisal</span></div>
+                <div class="t-zone z-hadal"><span>7.000m • Dasar Palung!</span></div>
+              </div>
+              <div id="submarines-track" class="submarines-track"></div>
+            </div>
+
+            <!-- Daftar Peringkat Live Kru -->
+            <div id="game-sidebar-players" class="sidebar-players-list"></div>
+
+            <!-- Bar Reaksi Gelembung Emoji -->
+            <div class="reaction-bar">
+              <span>Kirim Sinyal Sonar:</span>
+              <div class="reaction-btns">
+                <button class="react-btn" data-emoji="🧠" title="Mikir Keras!">🧠</button>
+                <button class="react-btn" data-emoji="😱" title="Susah!">😱</button>
+                <button class="react-btn" data-emoji="🔥" title="Dapat yang Langka!">🔥</button>
+                <button class="react-btn" data-emoji="💥" title="Awas Tabrakan!">💥</button>
+                <button class="react-btn" data-emoji="🐙" title="Salam Gurita!">🐙</button>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Kolom Kanan: Area Kuis, Input Sonar, & Reveal Fakta -->
+          <div class="game-main-stage">
+            <!-- Header Status Ronde & Timer -->
+            <div class="stage-top-bar glass-card">
+              <div class="category-meta">
+                <span class="theme-tag" id="game-category-theme">SAINS & ALAM</span>
+                <span class="answers-count-tag" id="game-category-count">📡 45+ Jawaban di Radar</span>
+              </div>
+
+              <div class="timer-box" id="timer-box">
+                <div class="timer-ring">
+                  <span id="game-timer-seconds">25</span>
+                </div>
+                <span class="timer-unit">detik</span>
+              </div>
+            </div>
+
+            <!-- Progress Bar Waktu -->
+            <div class="timer-progress-wrap">
+              <div id="game-timer-bar" class="timer-progress-bar"></div>
+            </div>
+
+            <!-- AREA FASE 1: MENJAWAB PERTANYAAN -->
+            <div id="phase-playing" class="stage-card glass-card">
+              <div class="prompt-container">
+                <span class="prompt-kicker">MISI PENYELAMAN RONDE INI:</span>
+                <h2 id="game-category-title" class="prompt-title">Sebutkan Negara di Benua Asia</h2>
+                <p id="game-category-hint" class="prompt-hint">Ada 48+ negara yang diakui di Asia, dari Asia Tenggara hingga Asia Tengah!</p>
+              </div>
+
+              <!-- Form Input Jawaban -->
+              <form id="form-answer" class="answer-form" autocomplete="off">
+                <div class="input-sonar-wrapper" id="input-sonar-wrapper">
+                  <span class="sonar-icon">📡</span>
+                  <input
+                    type="text"
+                    id="input-answer"
+                    enterkeyhint="send"
+                    autocapitalize="words"
+                    autocorrect="off"
+                    placeholder="Ketik jawaban paling langka..."
+                    autocomplete="off"
+                  />
+                  <button type="submit" class="btn-submit-dive" id="btn-submit-answer">
+                    SELAM! ⚓
+                  </button>
+                </div>
+              </form>
+
+              <!-- Pesan Umpan Balik Sonar (Valid / Tidak Valid) -->
+              <div id="sonar-feedback" class="sonar-feedback"></div>
+
+              <!-- Panel Saat Jawaban Sudah Terkunci -->
+              <div id="locked-answer-panel" class="locked-panel hidden">
+                <div class="locked-badge">✅ JAWABAN TERKUNCI DI SONAR</div>
+                <div class="locked-answer-text" id="locked-answer-name">Kirgizstan</div>
+                <p class="locked-wait-text">Menunggu penyelam lain mengunci jawaban...</p>
+                <button type="button" class="btn-reroll" id="btn-use-reroll">
+                  🔄 Gunakan Sonar Cadangan (Ganti Jawaban • Sisa: <span id="reroll-count">1</span>)
+                </button>
+              </div>
+
+              <!-- Bar Reaksi Cepat Khusus Mobile (Satu Jempol di Bawah Input) -->
+              <div class="mobile-quick-reactions">
+                <span>Sinyal Sonar:</span>
+                <div class="reaction-btns">
+                  <button type="button" class="react-btn" data-emoji="🧠">🧠</button>
+                  <button type="button" class="react-btn" data-emoji="😱">😱</button>
+                  <button type="button" class="react-btn" data-emoji="🔥">🔥</button>
+                  <button type="button" class="react-btn" data-emoji="💥">💥</button>
+                  <button type="button" class="react-btn" data-emoji="🐙">🐙</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AREA FASE 2: REVEAL HASIL RONDE & FAKTA EDUKASI -->
+            <div id="phase-reveal" class="stage-card glass-card hidden">
+              <div class="reveal-header">
+                <div>
+                  <span class="reveal-kicker">HASIL PENYELAMAN RONDE <span id="reveal-round-num">1</span></span>
+                  <h2 id="reveal-category-title">Sebutkan Negara di Benua Asia</h2>
+                </div>
+                <div class="next-round-countdown">
+                  Ronde berikutnya dalam <strong id="reveal-next-timer">10</strong>d
+                </div>
+              </div>
+
+              <!-- Daftar Jawaban Semua Pemain di Ronde Ini -->
+              <div id="reveal-results-list" class="reveal-results-list"></div>
+
+              <!-- Kotak Wawasan & Fakta Edukatif Palung -->
+              <div class="educational-spotlight-grid">
+                <div class="fact-box spotlight-fact" id="reveal-spotlight-box">
+                  <div class="fact-badge">💡 FAKTA TEMUAN TERLANGKA RONDE INI</div>
+                  <h4 id="spotlight-answer-title">Bhutan (+920m)</h4>
+                  <p id="spotlight-answer-fact">Satu-satunya negara karbon-negatif di dunia dan mengukur kemajuan dengan Kebahagiaan Nasional Bruto.</p>
+                </div>
+
+                <div class="fact-box legendary-vault">
+                  <div class="fact-badge">🟡 CONTOH JAWABAN "LEGENDA PALUNG" DI KATEGORI INI</div>
+                  <div id="reveal-legendary-list" class="legendary-mini-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== LAYAR 4: HASIL AKHIR & KARTU SELAM VIRAL ==================== -->
+      <section id="screen-gameover" class="screen">
+        <div class="gameover-card glass-card">
+          <div class="gameover-header">
+            <div class="gameover-badge" id="gameover-mode-badge">🏁 EKSPEDISI SELESAI!</div>
+            <h1 id="gameover-headline">Rekor Kedalaman Palung Tercapai!</h1>
+            <p id="gameover-subheadline">Berikut adalah hasil penyelaman dan wawasan baru yang berhasil kalian temukan:</p>
+          </div>
+
+          <!-- Podium / Klasemen Akhir -->
+          <div id="gameover-podium" class="podium-grid"></div>
+
+          <!-- Kartu Shareable (Mirip Wordle / Krillion.io) -->
+          <div class="share-section">
+            <div class="share-card-preview">
+              <h3>📲 Kartu Selammu (Siap Bagikan ke Teman!)</h3>
+              <pre id="share-text-box" class="share-pre"></pre>
+              <div class="share-btn-row">
+                <button class="btn-primary" id="btn-copy-share">📋 Salin Kartu</button>
+                <button class="btn-whatsapp" id="btn-share-wa">💬 Bagikan ke WhatsApp</button>
+              </div>
+            </div>
+
+            <div class="gameover-actions">
+              <button class="btn-start-big" id="btn-play-again">🔄 Main Lagi</button>
+              <button class="btn-secondary" id="btn-gameover-lobby">⚙️ Pengaturan Room</button>
+              <button class="btn-secondary" id="btn-gameover-home">🏠 Beranda Utama</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ==================== BOTTOM NAVIGATION BAR (KHUSUS MOBILE / PORTRAIT) ==================== -->
+    <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+      <button class="mnav-item active" data-action="home">
+        <span class="mnav-icon">🏠</span>
+        <span class="mnav-label">Beranda</span>
+      </button>
+      <button class="mnav-item" data-action="quick">
+        <span class="mnav-icon">⚡</span>
+        <span class="mnav-label">Arena Cepat</span>
+      </button>
+      <button class="mnav-item" data-action="daily">
+        <span class="mnav-icon">🏆</span>
+        <span class="mnav-label">Harian</span>
+      </button>
+      <button class="mnav-item" data-action="mobilehub">
+        <span class="mnav-icon">📲</span>
+        <span class="mnav-label">QR & HP</span>
+      </button>
+      <button class="mnav-item" data-action="workshop">
+        <span class="mnav-icon">🛠️</span>
+        <span class="mnav-label">Buat Kuis</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ==================== MODAL 1: MOBILE HUB, QR CODE WI-FI & PLAY STORE APK INFO ==================== -->
+  <div id="modal-mobile-hub" class="modal-overlay hidden">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h2>📲 Main di HP, Undang Teman & Paket Google Play Store</h2>
+        <button class="icon-btn" id="btn-close-mobile-hub">✕</button>
+      </div>
+      <p class="modal-desc">
+        <strong>PALUNG.IO</strong> kini sudah dilengkapi paket <strong>Android Native (Capacitor)</strong> untuk diunggah ke Google Play Store sekaligus <strong>Installable PWA & Mode Offline</strong>!
+      </p>
+
+      <div class="mobile-hub-grid">
+        <!-- Kolom QR Code & Link Wi-Fi Lokal -->
+        <div class="qr-card-box">
+          <div class="qr-badge">📡 SCAN DARI HP (WI-FI YANG SAMA)</div>
+          <canvas id="qr-canvas" width="180" height="180"></canvas>
+          <div class="lan-url-pill" id="lan-url-display">http://localhost:3000</div>
+          <div class="qr-actions-row">
+            <button class="btn-small" id="btn-copy-lan-url">📋 Salin Link</button>
+            <button class="btn-small btn-wa-inline" id="btn-share-app-wa">💬 Kirim ke WA</button>
+          </div>
+        </div>
+
+        <!-- Kolom Panduan Install & Play Store -->
+        <div class="mobile-guide-box">
+          <h4>1. Install Langsung di HP (Tanpa Kabel)</h4>
+          <p>Pastikan HP dan laptop terhubung ke Wi-Fi/Hotspot yang sama, lalu buka link di samping di Chrome/Safari HP dan tekan <strong>"Install Aplikasi / Tambahkan ke Layar Utama"</strong>.</p>
+
+          <h4>2. Mode Offline Mandiri (100% Jalan Tanpa Server)</h4>
+          <p>Seluruh 20 kategori & 850+ jawaban sudah tertanam di dalam aplikasi. Saat APK diunggah ke <strong>Google Play Store</strong>, pemain tetap bisa bermain melawan 3 AI Bot Pintar meskipun sedang offline!</p>
+
+          <h4>3. Koneksi Server Multiplayer (Wi-Fi / Cloud)</h4>
+          <p>Untuk main bareng lintas HP/Laptop, pastikan terhubung ke Wi-Fi yang sama atau masukkan alamat Server Multiplayer:</p>
+          <div class="join-input-row" style="margin-bottom:0.65rem;">
+            <input type="text" id="input-server-url" placeholder="http://192.168.1.9:3000" style="font-size:0.82rem;padding:0.5rem 0.7rem;" />
+            <button type="button" class="btn-small" id="btn-save-server-url">Hubungkan</button>
+          </div>
+
+          <h4>4. Download File <code>PALUNG-IO.apk</code> Langsung</h4>
+          <p>Kamu juga bisa mengunduh file APK terbaru langsung lewat tombol di bawah ini:</p>
+          <div style="margin-top:0.45rem;">
+            <a href="/PALUNG-IO.apk" download="PALUNG-IO.apk" class="btn-primary" style="display:inline-block;text-decoration:none;font-size:0.86rem;">
+              📥 Download PALUNG-IO.apk (Android)
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 2: WORKSHOP BUAT KATEGORI SENDIRI ==================== -->
+  <div id="modal-workshop" class="modal-overlay hidden">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <h2>🛠️ Workshop Kategori Komunitas Palung.io</h2>
+        <button class="icon-btn" id="btn-close-workshop">✕</button>
+      </div>
+      <p class="modal-desc">
+        Buat kategori kuis sendiri (misalnya untuk materi sekolah, kumpul keluarga, atau topik komunitasmu) lengkap dengan skor kelangkaannya!
+      </p>
+
+      <form id="form-workshop">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label>Judul Pertanyaan Kategori</label>
+            <input type="text" id="ws-title" placeholder="Contoh: Sebutkan Hewan Endemik Indonesia" required />
+          </div>
+          <div class="form-group">
+            <label>Tema</label>
+            <select id="ws-theme">
+              <option value="umum">💡 Pengetahuan Umum</option>
+              <option value="sains">🧬 Sains & Alam</option>
+              <option value="nusantara">🇮🇩 Budaya & Nusantara</option>
+              <option value="geografi">🗺️ Geografi & Dunia</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Petunjuk Singkat (Hint)</label>
+          <input type="text" id="ws-hint" placeholder="Contoh: Hewan asli yang hanya hidup di pulau-pulau Indonesia!" />
+        </div>
+
+        <div class="form-group">
+          <label>Daftar Jawaban, Skor Kelangkaan (10-100), dan Fakta Unik (1 per baris, format: <code>Nama Jawaban | Skor | Fakta Singkat</code>)</label>
+          <textarea id="ws-answers" rows="6" placeholder="Komodo | 15 | Kadal terbesar di dunia asal NTT
+Orangutan | 20 | Kera besar asli Sumatera dan Kalimantan
+Anoa | 65 | Kerbau kerdil endemik hutan Sulawesi
+Babirusa | 78 | Taringnya tumbuh menembus moncong
+Pesut Mahakam | 95 | Lumba-lumba air tawar langka di Sungai Mahakam"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-workshop">Batal</button>
+          <button type="submit" class="btn-primary">💾 Simpan & Tambahkan ke Game</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notifikasi & Container Gelembung Reaksi -->
+  <div id="toast-container" class="toast-container"></div>
+  <div id="floating-reactions" class="floating-reactions"></div>
+
+  <!-- Bundle Database Offline & Socket.IO -->
+  <script src="/categories-bundle.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

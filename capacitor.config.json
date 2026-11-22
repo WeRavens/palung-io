@@ -1,0 +1,14 @@
+{
+  "appId": "io.palung.game",
+  "appName": "PALUNG.IO",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "backgroundColor": "#040d1a",
+    "allowMixedContent": true
+  }
+}
