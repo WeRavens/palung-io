@@ -110,30 +110,38 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
 
   const userPrompt = `Kategori: "${categoryTitle}"\nPetunjuk: "${categoryHint || "-"}"\nJawaban pemain: "${rawInput}"\nApakah jawaban ini benar secara faktual?`;
 
-  const { model, content } = await callCloudWorkerAI(
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ],
-    { temperature: 0.15, maxTokens: 280 }
-  );
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { model, content } = await callCloudWorkerAI(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        { temperature: 0.15, maxTokens: 700 }
+      );
 
-  const parsed = extractJsonObject(content);
-  if (!parsed || typeof parsed.valid !== "boolean") {
-    throw new Error("Format respons AI tidak valid saat menilai jawaban.");
+      const parsed = extractJsonObject(content);
+      if (!parsed || typeof parsed.valid !== "boolean") {
+        throw new Error("Format respons AI tidak valid saat menilai jawaban.");
+      }
+
+      if (!parsed.valid) {
+        return { valid: false, modelUsed: model };
+      }
+
+      return {
+        valid: true,
+        canonicalName: String(parsed.canonicalName || rawInput).trim(),
+        score: Math.min(100, Math.max(10, Math.round(Number(parsed.score) || 55))),
+        fact: String(parsed.fact || "Fakta menarik yang ditemukan bersama Sonar AI Palung.io!").trim(),
+        modelUsed: model
+      };
+    } catch (err) {
+      lastErr = err;
+    }
   }
-
-  if (!parsed.valid) {
-    return { valid: false, modelUsed: model };
-  }
-
-  return {
-    valid: true,
-    canonicalName: String(parsed.canonicalName || rawInput).trim(),
-    score: Math.min(100, Math.max(10, Math.round(Number(parsed.score) || 55))),
-    fact: String(parsed.fact || "Fakta menarik yang ditemukan bersama Sonar AI Palung.io!").trim(),
-    modelUsed: model
-  };
+  throw lastErr;
 }
 
 async function generateCategoryWithAI(topic, theme = "umum") {
