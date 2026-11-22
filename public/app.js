@@ -2778,6 +2778,46 @@ document.getElementById("btn-cancel-workshop").addEventListener("click", () => {
   modalWorkshop.classList.add("hidden");
 });
 
+const btnWsAiGenerate = document.getElementById("btn-ws-ai-generate");
+if (btnWsAiGenerate) {
+  btnWsAiGenerate.addEventListener("click", async () => {
+    const topic = document.getElementById("ws-title").value.trim();
+    const theme = document.getElementById("ws-theme").value;
+    if (!topic) {
+      showToast("⚠️ Ketik Judul / Topik kategori di atas terlebih dahulu!");
+      document.getElementById("ws-title").focus();
+      return;
+    }
+    const origText = btnWsAiGenerate.textContent;
+    btnWsAiGenerate.disabled = true;
+    btnWsAiGenerate.textContent = "⏳ Meracik AI...";
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/ai/generate-category`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, theme })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(`❌ ${data.error || "Gagal generate kategori AI"}`);
+        return;
+      }
+      document.getElementById("ws-title").value = data.title || topic;
+      if (data.hint) document.getElementById("ws-hint").value = data.hint;
+      document.getElementById("ws-answers").value = (data.answers || [])
+        .map((a) => `${a.name} | ${a.score} | ${a.fact}`)
+        .join("\n");
+      playDiveLock();
+      showToast(`✨ ${data.answers.length} jawaban dibuat otomatis oleh ${data.modelUsed}!`);
+    } catch (err) {
+      showToast("❌ Gagal menghubungi server AI.");
+    } finally {
+      btnWsAiGenerate.disabled = false;
+      btnWsAiGenerate.textContent = origText;
+    }
+  });
+}
+
 document.getElementById("form-workshop").addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = document.getElementById("ws-title").value.trim();

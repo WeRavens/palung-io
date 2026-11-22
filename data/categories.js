@@ -934,6 +934,7 @@ const CATEGORIES = [
 ];
 
 const { EXTRA_CATEGORIES } = require("./extraCategories");
-const ALL_CATEGORIES = [...CATEGORIES, ...EXTRA_CATEGORIES];
+const { MORE_CATEGORIES } = require("./moreCategories");
+const ALL_CATEGORIES = [...CATEGORIES, ...EXTRA_CATEGORIES, ...MORE_CATEGORIES];
 
 module.exports = { CATEGORIES: ALL_CATEGORIES };

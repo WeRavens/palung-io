@@ -7,6 +7,27 @@ const QRCode = require("qrcode");
 const { Server } = require("socket.io");
 const { CATEGORIES } = require("./data/categories");
 
+// Muat file .env lokal secara aman bila ada (untuk GROQ_API_KEY di lokal; di Render pakai Env Vars)
+try {
+  const envPath = path.join(__dirname, ".env");
+  if (fs.existsSync(envPath)) {
+    fs.readFileSync(envPath, "utf8")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx > 0) {
+          const k = trimmed.slice(0, eqIdx).trim();
+          const v = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+          if (!process.env[k]) process.env[k] = v;
+        }
+      });
+  }
+} catch (err) {}
+
+const ai = require("./ai");
+
 function getLocalLanIp() {
   const nets = os.networkInterfaces();
   const candidates = [];
@@ -146,13 +167,19 @@ function getTierInfo(score) {
   };
 }
 
+function getCategoryAnswersPool(category) {
+  const learned = (runtimeData.aiLearnedAnswers && runtimeData.aiLearnedAnswers[category.id]) || [];
+  return learned.length > 0 ? [...category.answers, ...learned] : category.answers;
+}
+
 function matchCategoryAnswer(category, rawInput) {
   const normInput = normalizeText(rawInput);
   if (!normInput || normInput.length < 1) return null;
   const strippedInput = stripOptionalPrefix(normInput);
+  const pool = getCategoryAnswersPool(category);
 
   // 1. Exact Match (Nama utama atau alias, baik utuh maupun tanpa prefix opsional)
-  for (const ans of category.answers) {
+  for (const ans of pool) {
     const candidates = [ans.name, ...(ans.aliases || [])];
     for (const cand of candidates) {
       const normCand = normalizeText(cand);
@@ -172,7 +199,7 @@ function matchCategoryAnswer(category, rawInput) {
   let bestMatch = null;
   let bestDist = 99;
 
-  for (const ans of category.answers) {
+  for (const ans of pool) {
     const candidates = [ans.name, ...(ans.aliases || [])];
     for (const cand of candidates) {
       const normCand = normalizeText(cand);
@@ -899,6 +926,29 @@ app.get("/r/:code", (req, res) => {
   res.redirect(`/?room=${code}`);
 });
 
+// Status & Generator Kategori Groq AI Multi-Model
+app.get("/api/ai/status", (req, res) => {
+  res.json(ai.getAiStatus());
+});
+
+app.post("/api/ai/generate-category", async (req, res) => {
+  const { topic, theme } = req.body || {};
+  if (!topic || String(topic).trim().length < 2) {
+    return res.status(400).json({ error: "Masukkan topik kategori terlebih dahulu." });
+  }
+  if (!ai.isEnabled()) {
+    return res.status(503).json({
+      error: "GROQ_API_KEY belum terpasang di server. Tambahkan GROQ_API_KEY di .env atau Environment Variable."
+    });
+  }
+  try {
+    const generated = await ai.generateCategoryWithAI(String(topic).trim(), theme || "umum");
+    res.json({ success: true, ...generated });
+  } catch (err) {
+    res.status(502).json({ error: `Gagal generate kategori via Groq AI: ${err.message}` });
+  }
+});
+
 // Sitemap XML dinamis untuk indeks Google Search Console
 app.get("/sitemap.xml", (req, res) => {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
@@ -1203,8 +1253,8 @@ io.on("connection", (socket) => {
     broadcastRoomUpdate(room);
   });
 
-  // 7. Submit Jawaban Selama Ronde Berlangsung
-  socket.on("round:submit", ({ answer }, callback) => {
+  // 7. Submit Jawaban Selama Ronde Berlangsung (Hybrid: Database Lokal + Groq Multi-Model AI Judge)
+  socket.on("round:submit", async ({ answer }, callback) => {
     if (!currentRoomCode) return;
     const room = rooms.get(currentRoomCode);
     if (!room || room.state !== "PLAYING") return;
@@ -1215,7 +1265,38 @@ io.on("connection", (socket) => {
     const currentCat = room.selectedCategories[room.currentRound - 1];
     if (!currentCat) return;
 
-    const match = matchCategoryAnswer(currentCat, answer);
+    let match = matchCategoryAnswer(currentCat, answer);
+    let aiModelUsed = null;
+
+    if (!match && ai.isEnabled() && (answer || "").trim().length >= 2) {
+      try {
+        const aiVerdict = await ai.validateAnswerWithAI(
+          currentCat.title,
+          currentCat.hint,
+          (answer || "").trim()
+        );
+        if (room.state !== "PLAYING") return; // Pastikan ronde belum keburu habis
+        if (aiVerdict && aiVerdict.valid) {
+          if (!runtimeData.aiLearnedAnswers) runtimeData.aiLearnedAnswers = {};
+          if (!runtimeData.aiLearnedAnswers[currentCat.id]) {
+            runtimeData.aiLearnedAnswers[currentCat.id] = [];
+          }
+          const newEntry = {
+            name: aiVerdict.canonicalName,
+            aliases: [normalizeText(answer)],
+            score: aiVerdict.score,
+            fact: aiVerdict.fact
+          };
+          runtimeData.aiLearnedAnswers[currentCat.id].push(newEntry);
+          saveRuntimeData();
+          match = computeDynamicScore(currentCat.id, newEntry);
+          aiModelUsed = aiVerdict.modelUsed;
+        }
+      } catch (err) {
+        console.warn("[AI] Gagal memvalidasi jawaban:", err.message);
+      }
+    }
+
     if (!match) {
       if (typeof callback === "function") {
         callback({
@@ -1229,6 +1310,7 @@ io.on("connection", (socket) => {
     room.roundSubmissions[socket.id] = {
       rawInput: (answer || "").trim(),
       match,
+      aiModelUsed,
       submittedAt: Date.now()
     };
     player.readyInRound = true;
@@ -1238,6 +1320,8 @@ io.on("connection", (socket) => {
         valid: true,
         canonicalName: match.canonicalName,
         tierHint: match.tier.name,
+        aiValidated: Boolean(aiModelUsed),
+        aiModelUsed,
         rerollsLeft: player.rerollsLeft
       });
     }

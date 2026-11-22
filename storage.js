@@ -8,9 +8,14 @@ const path = require("path");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const JSON_FILE = path.join(DATA_DIR, "runtime_stats.json");
 const DB_FILE = path.join(DATA_DIR, "palung.sqlite");
-const KEYS = ["answerCounts", "dailyLeaderboard", "customCategories"];
+const KEYS = ["answerCounts", "dailyLeaderboard", "customCategories", "aiLearnedAnswers"];
 
-const DEFAULTS = () => ({ answerCounts: {}, dailyLeaderboard: {}, customCategories: [] });
+const DEFAULTS = () => ({
+  answerCounts: {},
+  dailyLeaderboard: {},
+  customCategories: [],
+  aiLearnedAnswers: {}
+});
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
