@@ -373,11 +373,11 @@ function createRoom({
     isDaily: Boolean(isDaily),
     state: "LOBBY", // LOBBY | PLAYING | REVEAL | GAMEOVER
     settings: {
-      roundsTotal: isDaily ? 7 : Number(settings.roundsTotal) || 7,
-      roundDuration: isDaily ? 25 : Number(settings.roundDuration) || 25,
-      theme: isDaily ? "all" : settings.theme || "all",
+      roundsTotal: isDaily ? 7 : Math.min(15, Math.max(3, Math.round(Number(settings.roundsTotal)) || 7)),
+      roundDuration: isDaily ? 25 : Math.min(60, Math.max(10, Math.round(Number(settings.roundDuration)) || 25)),
+      theme: isDaily ? "all" : typeof settings.theme === "string" ? settings.theme.slice(0, 30) : "all",
       collisionRule: isDaily ? false : settings.collisionRule !== false,
-      gameMode: isDaily ? "daily" : settings.gameMode || "competitive" // competitive | coop | daily
+      gameMode: isDaily ? "daily" : ["competitive", "coop", "tide"].includes(settings.gameMode) ? settings.gameMode : "competitive"
     },
     players: [],
     currentRound: 0,
@@ -1099,6 +1099,33 @@ app.post("/api/categories/custom", (req, res) => {
 io.on("connection", (socket) => {
   let currentRoomCode = null;
 
+  // Penjaga global: tangkap galat handler (payload rusak tidak boleh menjatuhkan server)
+  // dan batasi laju event per koneksi (token bucket: 12 event/detik, burst 25).
+  const bucket = { tokens: 25, last: Date.now() };
+  const rawOn = socket.on.bind(socket);
+  socket.on = (event, handler) =>
+    rawOn(event, (...args) => {
+      if (event !== "disconnect") {
+        const now = Date.now();
+        bucket.tokens = Math.min(25, bucket.tokens + ((now - bucket.last) / 1000) * 12);
+        bucket.last = now;
+        if (bucket.tokens < 1) {
+          const cb = args[args.length - 1];
+          if (typeof cb === "function") cb({ success: false, valid: false, error: "Terlalu cepat, coba lagi sebentar.", message: "Terlalu cepat, coba lagi sebentar." });
+          return;
+        }
+        bucket.tokens -= 1;
+      }
+      try {
+        const out = handler(...args);
+        if (out && typeof out.catch === "function") {
+          out.catch((err) => console.error("[socket]", event, err && err.message));
+        }
+      } catch (err) {
+        console.error("[socket]", event, err && err.message);
+      }
+    });
+
   function leaveCurrentRoom(isDisconnect = false) {
     if (!currentRoomCode) return;
     const room = rooms.get(currentRoomCode);
@@ -1287,13 +1314,21 @@ io.on("connection", (socket) => {
     const room = rooms.get(currentRoomCode);
     if (!room || room.hostId !== socket.id || room.state !== "LOBBY") return;
 
-    if (newSettings.roundsTotal) room.settings.roundsTotal = Number(newSettings.roundsTotal);
-    if (newSettings.roundDuration) room.settings.roundDuration = Number(newSettings.roundDuration);
-    if (newSettings.theme) room.settings.theme = newSettings.theme;
+    if (!newSettings || typeof newSettings !== "object") return;
+    const rounds = Math.round(Number(newSettings.roundsTotal));
+    if (Number.isFinite(rounds)) room.settings.roundsTotal = Math.min(15, Math.max(3, rounds));
+    const dur = Math.round(Number(newSettings.roundDuration));
+    if (Number.isFinite(dur)) room.settings.roundDuration = Math.min(60, Math.max(10, dur));
+    if (typeof newSettings.theme === "string") {
+      const themes = new Set(getAllCategories().map((c) => c.theme));
+      if (newSettings.theme === "all" || themes.has(newSettings.theme)) room.settings.theme = newSettings.theme;
+    }
     if (typeof newSettings.collisionRule === "boolean") {
       room.settings.collisionRule = newSettings.collisionRule;
     }
-    if (newSettings.gameMode) room.settings.gameMode = newSettings.gameMode;
+    if (["competitive", "coop", "tide"].includes(newSettings.gameMode)) {
+      room.settings.gameMode = newSettings.gameMode;
+    }
 
     broadcastRoomUpdate(room);
   });
@@ -1529,6 +1564,12 @@ io.on("connection", (socket) => {
     if (!room) return;
     const player = room.players.find((p) => p.id === socket.id);
     if (!player) return;
+
+    const nowR = Date.now();
+    if (player.lastReactionAt && nowR - player.lastReactionAt < 400) return;
+    player.lastReactionAt = nowR;
+    if (emoji != null && typeof emoji !== "string") return;
+    if (text != null && typeof text !== "string") return;
 
     io.to(room.code).emit("room:reaction", {
       playerId: player.id,
