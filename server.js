@@ -1099,6 +1099,7 @@ io.on("connection", (socket) => {
         broadcastRoomUpdate(room);
         checkIfAllPlayersReady(room);
       }
+      broadcastPublicRooms();
     }
     currentRoomCode = null;
   }
