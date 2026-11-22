@@ -14,6 +14,7 @@ const GROQ_MODELS = [
 ];
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_PROXY_URL = "https://recall-ai-proxy.dev-weravens.workers.dev";
 
 // Status cooldown per-model: { [modelName]: { cooldownUntil, lastError, successCount, errorCount } }
 const modelStats = {};
@@ -30,8 +31,13 @@ function getApiKey() {
   return (process.env.GROQ_API_KEY || "").trim();
 }
 
+function getProxyUrl() {
+  if (process.env.AI_PROXY_URL === "") return "";
+  return (process.env.AI_PROXY_URL || DEFAULT_PROXY_URL).trim();
+}
+
 function isEnabled() {
-  return getApiKey().length > 10;
+  return Boolean(getProxyUrl() || getApiKey().length > 10);
 }
 
 function getAvailableModels() {
@@ -66,9 +72,16 @@ function extractJsonObject(text) {
 }
 
 async function callGroqWithFallback(messages, { temperature = 0.25, maxTokens = 800 } = {}) {
+  const proxyUrl = getProxyUrl();
   const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("GROQ_API_KEY belum dikonfigurasi di environment server.");
+  const endpoint = proxyUrl || GROQ_ENDPOINT;
+  if (!proxyUrl && !apiKey) {
+    throw new Error("AI_PROXY_URL atau GROQ_API_KEY belum dikonfigurasi di server.");
+  }
+
+  const headers = { "Content-Type": "application/json" };
+  if (!proxyUrl && apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
   }
 
   const candidates = getAvailableModels();
@@ -79,12 +92,9 @@ async function callGroqWithFallback(messages, { temperature = 0.25, maxTokens = 
     const timeout = setTimeout(() => controller.abort(), 9000);
 
     try {
-      const res = await fetch(GROQ_ENDPOINT, {
+      const res = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`
-        },
+        headers,
         body: JSON.stringify({
           model,
           messages,
