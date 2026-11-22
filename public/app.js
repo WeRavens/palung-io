@@ -2412,7 +2412,70 @@ function ensurePersistentOceanRunning() {
       }
     }
 
-    // 3. Siluet Kelp / Rumput Laut & Tebing Palung di Sisi Kiri-Kanan
+    // 2B. Bioluminescent Sonar HUD Rings & Sweep (di belakang kapal selam)
+    oCtx.save();
+    const sonarCx = W * 0.5;
+    const sonarCy = anchorY;
+    const sonarMaxR = Math.min(W, H) * 0.44;
+    oCtx.strokeStyle = "rgba(56, 189, 248, 0.065)";
+    oCtx.lineWidth = 1;
+    for (let rIdx = 1; rIdx <= 3; rIdx++) {
+      oCtx.beginPath();
+      oCtx.arc(sonarCx, sonarCy, (sonarMaxR * rIdx) / 3, 0, Math.PI * 2);
+      oCtx.stroke();
+    }
+    const sweepAngle = (now * 0.00075) % (Math.PI * 2);
+    const sweepGrad = oCtx.createLinearGradient(
+      sonarCx,
+      sonarCy,
+      sonarCx + Math.cos(sweepAngle) * sonarMaxR,
+      sonarCy + Math.sin(sweepAngle) * sonarMaxR
+    );
+    sweepGrad.addColorStop(0, "rgba(34, 211, 238, 0.14)");
+    sweepGrad.addColorStop(1, "rgba(34, 211, 238, 0)");
+    oCtx.strokeStyle = sweepGrad;
+    oCtx.lineWidth = 2;
+    oCtx.beginPath();
+    oCtx.moveTo(sonarCx, sonarCy);
+    oCtx.lineTo(
+      sonarCx + Math.cos(sweepAngle) * sonarMaxR,
+      sonarCy + Math.sin(sweepAngle) * sonarMaxR
+    );
+    oCtx.stroke();
+    oCtx.restore();
+
+    // 2C. Partikel Plankton Bioluminesensi (cyan, teal, ungu abyssal)
+    oCtx.save();
+    for (let i = 0; i < 24; i++) {
+      const px = ((Math.sin(i * 78.233 + now * 0.00018) * 0.5 + 0.5) * W);
+      const py = (((i * 97 + camD * 0.65 - now * 0.018) % H) + H) % H;
+      const pulse = 0.45 + 0.55 * Math.sin(now * 0.003 + i * 1.7);
+      const bioPalette = ["34, 211, 238", "52, 211, 153", "167, 139, 250"];
+      const rgb = bioPalette[i % bioPalette.length];
+      oCtx.beginPath();
+      oCtx.arc(px, py, 3.8, 0, Math.PI * 2);
+      oCtx.fillStyle = `rgba(${rgb}, ${0.14 * pulse})`;
+      oCtx.fill();
+      oCtx.beginPath();
+      oCtx.arc(px, py, 1.5, 0, Math.PI * 2);
+      oCtx.fillStyle = `rgba(${rgb}, ${0.62 * pulse})`;
+      oCtx.fill();
+    }
+    oCtx.restore();
+
+    // 3. Layered Abyssal Silhouette (Tebing Palung & Rumput Laut Berlapis)
+    oCtx.fillStyle = "rgba(2, 10, 24, 0.52)";
+    oCtx.beginPath();
+    oCtx.moveTo(0, H);
+    oCtx.lineTo(0, H * 0.84);
+    for (let x = 0; x <= W + 40; x += 40) {
+      const y = H * 0.85 + Math.sin(x * 0.008 + now * 0.0006) * 14 + Math.cos(x * 0.015) * 8;
+      oCtx.lineTo(x, y);
+    }
+    oCtx.lineTo(W, H);
+    oCtx.closePath();
+    oCtx.fill();
+
     oCtx.fillStyle = "rgba(2, 10, 22, 0.45)";
     oceanWorld.kelps.forEach((k) => {
       const kx = k.xNorm * W;
