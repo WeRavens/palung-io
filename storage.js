@@ -1,7 +1,9 @@
-// Lapisan penyimpanan statistik PALUNG.IO.
-// Memakai SQLite bawaan Node (node:sqlite, Node >= 22.5) bila tersedia,
-// dan otomatis turun ke berkas JSON jika tidak. Lokasi data bisa diatur lewat
-// env DATA_DIR (arahkan ke persistent disk di hosting agar data tidak hilang).
+// ============================================================================
+// Lapisan Penyimpanan PALUNG.IO (Hybrid: Turso Cloud SQLite + Local SQLite/JSON)
+// - Jika TURSO_DATABASE_URL & TURSO_AUTH_TOKEN diisi, data otomatis sinkron
+//   secara online & permanen ke Turso Cloud (Gratis 5GB).
+// - Jika belum diisi, otomatis memakai SQLite lokal (data/palung.sqlite) / JSON.
+// ============================================================================
 const fs = require("fs");
 const path = require("path");
 
@@ -30,6 +32,94 @@ try {
   console.warn("[storage] node:sqlite tidak tersedia, memakai berkas JSON:", err.message);
 }
 
+// ============================================================================
+// TURSO CLOUD SQLITE (HTTP PIPELINE API - ZERO EXTRA DEPENDENCIES)
+// ============================================================================
+function getTursoConfig() {
+  const rawUrl = (process.env.TURSO_DATABASE_URL || "").trim();
+  const token = (process.env.TURSO_AUTH_TOKEN || "").trim();
+  if (!rawUrl || !token) return null;
+  const httpUrl = rawUrl.replace(/^libsql:\/\//i, "https://").replace(/\/+$/, "");
+  return { httpUrl: `${httpUrl}/v2/pipeline`, token };
+}
+
+async function tursoExecute(statements) {
+  const cfg = getTursoConfig();
+  if (!cfg) return null;
+  const requests = statements.map((s) =>
+    typeof s === "string"
+      ? { type: "execute", stmt: { sql: s } }
+      : { type: "execute", stmt: { sql: s.sql, args: s.args || [] } }
+  );
+  requests.push({ type: "close" });
+
+  const res = await fetch(cfg.httpUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.token}`
+    },
+    body: JSON.stringify({ requests })
+  });
+  if (!res.ok) {
+    throw new Error(`Turso HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function initCloudAndHydrate(runtimeData) {
+  const cfg = getTursoConfig();
+  if (!cfg) return false;
+  try {
+    await tursoExecute([
+      "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+    ]);
+    const resp = await tursoExecute(["SELECT key, value FROM kv"]);
+    const rows = resp?.results?.[0]?.response?.result?.rows || [];
+    if (rows.length > 0) {
+      for (const row of rows) {
+        const k = row[0]?.value;
+        const v = row[1]?.value;
+        if (k && v && KEYS.includes(k)) {
+          try {
+            runtimeData[k] = JSON.parse(v);
+          } catch (e) {}
+        }
+      }
+      console.log("[storage] Data berhasil dimuat dari Turso Cloud SQLite.");
+    } else {
+      await saveToCloud(runtimeData);
+      console.log("[storage] Inisialisasi awal data ke Turso Cloud SQLite selesai.");
+    }
+    return true;
+  } catch (err) {
+    console.warn("[storage] Gagal sinkron Turso Cloud, memakai lokal:", err.message);
+    return false;
+  }
+}
+
+async function saveToCloud(data) {
+  const cfg = getTursoConfig();
+  if (!cfg) return;
+  try {
+    const now = String(Date.now());
+    const stmts = KEYS.map((k) => ({
+      sql: "INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+      args: [
+        { type: "text", value: k },
+        { type: "text", value: JSON.stringify(data[k] ?? DEFAULTS()[k]) },
+        { type: "integer", value: now }
+      ]
+    }));
+    await tursoExecute(stmts);
+  } catch (err) {
+    console.warn("[storage] Gagal menyimpan ke Turso Cloud:", err.message);
+  }
+}
+
+// ============================================================================
+// LOCAL SQLITE / JSON FALLBACK
+// ============================================================================
 function readJsonFile() {
   try {
     if (fs.existsSync(JSON_FILE)) return JSON.parse(fs.readFileSync(JSON_FILE, "utf8"));
@@ -46,7 +136,6 @@ function load() {
   }
   const rows = db.prepare("SELECT key, value FROM kv").all();
   if (rows.length === 0) {
-    // Migrasi satu kali dari runtime_stats.json lama
     const legacy = readJsonFile();
     if (legacy) {
       Object.assign(data, legacy);
@@ -69,23 +158,33 @@ function save(data) {
   try {
     if (!db) {
       fs.writeFileSync(JSON_FILE, JSON.stringify(data, null, 2), "utf8");
-      return;
-    }
-    const stmt = db.prepare(
-      "INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-    );
-    db.exec("BEGIN");
-    try {
-      const now = Date.now();
-      for (const k of KEYS) stmt.run(k, JSON.stringify(data[k] ?? DEFAULTS()[k]), now);
-      db.exec("COMMIT");
-    } catch (e) {
-      db.exec("ROLLBACK");
-      throw e;
+    } else {
+      const stmt = db.prepare(
+        "INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      );
+      db.exec("BEGIN");
+      try {
+        const now = Date.now();
+        for (const k of KEYS) stmt.run(k, JSON.stringify(data[k] ?? DEFAULTS()[k]), now);
+        db.exec("COMMIT");
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      }
     }
   } catch (err) {
-    console.error("[storage] Gagal menyimpan:", err.message);
+    console.error("[storage] Gagal menyimpan lokal:", err.message);
+  }
+
+  // Sinkronkan juga ke Turso Cloud secara asynchronous jika dikonfigurasi
+  if (getTursoConfig()) {
+    saveToCloud(data);
   }
 }
 
-module.exports = { load, save, backend: db ? "sqlite" : "json" };
+module.exports = {
+  load,
+  save,
+  initCloudAndHydrate,
+  backend: getTursoConfig() ? "turso-cloud+sqlite" : db ? "sqlite" : "json"
+};

@@ -51,9 +51,10 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Penyimpanan Statistik Kelangkaan Dinamis & Leaderboard Harian (SQLite / JSON fallback)
+// Penyimpanan Statistik Kelangkaan Dinamis & Leaderboard Harian (Turso Cloud + SQLite / JSON fallback)
 const storage = require("./storage");
 let runtimeData = storage.load();
+storage.initCloudAndHydrate(runtimeData);
 console.log("[storage] backend:", storage.backend);
 
 let saveTimer = null;
