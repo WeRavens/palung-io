@@ -511,30 +511,40 @@
             </button>
           </div>
 
-          <!-- FASE 2: REVEAL HASIL RONDE & FAKTA EDUKASI (MENGAMBANG DI ATAS LAUT) -->
-          <div id="phase-reveal" class="ocean-reveal-sheet hidden">
-            <div class="reveal-header">
-              <div>
-                <span class="reveal-kicker">HASIL PENYELAMAN RONDE <span id="reveal-round-num">1</span></span>
-                <h2 id="reveal-category-title">Sebutkan Negara di Benua Asia</h2>
+          <!-- FASE 2: FLOATING OCEAN BAR DI BAWAH (LAUTAN & KAPAL SELAM TETAP TERBUKA PENUH!) -->
+          <div id="phase-reveal" class="ocean-reveal-dock hidden">
+            <!-- Popover Detail Kru Opsional (Hanya terbuka jika tombol 📊 Detail diklik) -->
+            <div id="reveal-detail-drawer" class="reveal-detail-drawer hidden">
+              <div class="reveal-drawer-head">
+                <div>
+                  <span class="reveal-kicker">DETAIL RONDE <span id="reveal-round-num">1</span></span>
+                  <strong id="reveal-category-title" style="display:block;font-size:0.95rem;">Sebutkan Negara di Benua Asia</strong>
+                </div>
+                <button type="button" class="icon-btn" id="btn-close-reveal-detail" style="padding:0.2rem 0.55rem;">✕</button>
               </div>
-              <div class="next-round-countdown">
-                Ronde baru dalam <strong id="reveal-next-timer">10</strong>d
-              </div>
+              <div id="reveal-results-list" class="reveal-results-list compact-results-list"></div>
             </div>
 
-            <div id="reveal-results-list" class="reveal-results-list"></div>
-
-            <div class="educational-spotlight-grid">
-              <div class="fact-box spotlight-fact" id="reveal-spotlight-box">
-                <div class="fact-badge">💡 FAKTA TEMUAN TERLANGKA RONDE INI</div>
-                <h4 id="spotlight-answer-title">Bhutan (+920m)</h4>
-                <p id="spotlight-answer-fact">Satu-satunya negara karbon-negatif di dunia.</p>
+            <!-- Bar Ramping Mengambang di Bawah Laut -->
+            <div class="ocean-insight-bar">
+              <div class="oib-top-row">
+                <div class="oib-tabs">
+                  <button type="button" class="oib-tab active" data-oib="fact">💡 Fakta Terlangka</button>
+                  <button type="button" class="oib-tab" data-oib="legend">🟡 Contoh Legenda</button>
+                  <button type="button" class="oib-tab" id="btn-toggle-reveal-detail">📊 Detail Kru</button>
+                </div>
+                <div class="next-round-countdown oib-timer">
+                  Ronde baru <strong id="reveal-next-timer">9</strong>d
+                </div>
               </div>
 
-              <div class="fact-box legendary-vault">
-                <div class="fact-badge">🟡 CONTOH JAWABAN "LEGENDA PALUNG"</div>
-                <div id="reveal-legendary-list" class="legendary-mini-list"></div>
+              <div class="oib-body" id="oib-panel-fact">
+                <strong id="spotlight-answer-title" class="oib-title">Bhutan (+920m)</strong>
+                <p id="spotlight-answer-fact" class="oib-text">Satu-satunya negara karbon-negatif di dunia.</p>
+              </div>
+
+              <div class="oib-body hidden" id="oib-panel-legend">
+                <div id="reveal-legendary-list" class="oib-legend-list"></div>
               </div>
             </div>
           </div>

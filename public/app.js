@@ -1644,6 +1644,11 @@ function handleRoundStartUI(payload) {
     oceanWorld.targetCameraDepth = 0;
     oceanWorld.diveActive = false;
   }
+  if (typeof oceanWorld !== "undefined") {
+    oceanWorld.showRevealTags = false;
+  }
+  const revDrawer = document.getElementById("reveal-detail-drawer");
+  if (revDrawer) revDrawer.classList.add("hidden");
   if (typeof ensurePersistentOceanRunning === "function") {
     ensurePersistentOceanRunning();
   }
@@ -1839,6 +1844,7 @@ const oceanWorld = {
   cameraDepth: 0,
   targetCameraDepth: 0,
   diveActive: false,
+  showRevealTags: false,
   diveStartTime: 0,
   diveDurationMs: 4000,
   diveFromDepth: 0,
@@ -2174,7 +2180,7 @@ function ensurePersistentOceanRunning() {
 
     const camD = oceanWorld.cameraDepth;
     const pxPerMeter = 1.65;
-    const anchorY = oceanWorld.diveActive ? H * 0.48 : H * 0.68;
+    const anchorY = oceanWorld.diveActive || oceanWorld.showRevealTags ? H * 0.44 : H * 0.68;
 
     // 1. Gradasi Air Samudra Berkelanjutan
     const cols = getOceanColorsAtDepth(camD);
@@ -2332,18 +2338,21 @@ function ensurePersistentOceanRunning() {
     oCtx.fillText("YOU", rulerX - 17, anchorY + 3);
     oCtx.restore();
 
-    // 8. Render Kapal Selam PALUNG.IO Pemain (Saat Menyelam MAUPUN Saat Mengambang Membaca Soal!)
-    if (oceanWorld.diveActive) {
+    // 8. Render Kapal Selam PALUNG.IO Pemain (Saat Menyelam, Pasca-Selam, MAUPUN Saat Mengambang Membaca Soal!)
+    if (oceanWorld.diveActive || oceanWorld.showRevealTags) {
+      const pProg = oceanWorld.diveActive ? diveProgress : 1;
+      const isDivingNow = oceanWorld.diveActive;
       const count = oceanWorld.diveResults.length || 1;
       oceanWorld.diveResults.forEach((r, idx) => {
         const startD = Math.max(0, (r.totalDepth || 0) - (r.depthGained || 0));
-        const curD = startD + (r.depthGained || 0) * diveProgress;
-        const laneX = count === 1 ? W * 0.5 : W * (0.2 + (idx / (count - 1)) * 0.56);
-        const dy = anchorY + (curD - camD) * pxPerMeter;
+        const curD = startD + (r.depthGained || 0) * pProg;
+        const laneX = count === 1 ? W * 0.5 : W * (0.18 + (idx / (count - 1)) * 0.62);
+        const bob = isDivingNow ? 0 : Math.sin(now * 0.0025 + idx) * 4;
+        const dy = anchorY + (curD - camD) * pxPerMeter + bob;
         const isMe = r.playerId === oceanWorld.diveMyId;
-        if (dy > 40 && dy < H - 25) {
+        if (dy > 48 && dy < H - 35) {
           const wordTag = r.answered
-            ? `"${r.canonicalName.toUpperCase()}" ${r.isCollision ? "💥" : "▼"}`
+            ? `"${r.canonicalName.toUpperCase()}" ${r.isCollision ? "💥" : `+${r.depthGained}m`}`
             : "0m";
           drawPalungSubmarine(
             oCtx,
@@ -2354,12 +2363,12 @@ function ensurePersistentOceanRunning() {
             isMe,
             r.playerColor,
             r.playerAvatar,
-            `${r.playerName.slice(0, 8)} +${Math.round((r.depthGained || 0) * diveProgress)}m`,
-            isMe || diveProgress > 0.35 ? wordTag : null,
+            `${r.playerName.slice(0, 8)} • ${Math.round(curD)}m`,
+            isMe || pProg > 0.35 ? wordTag : null,
             r.isCollision,
             r.isSoleExplorer,
             camD,
-            true
+            isDivingNow
           );
         }
       });
@@ -2448,10 +2457,39 @@ function playGroupDescendAnimation(payload, onDone) {
   oceanWorld.lastTierSound = 0;
   oceanWorld.lastBubbleTime = 0;
   oceanWorld.diveActive = true;
+  oceanWorld.showRevealTags = false;
   oceanWorld.diveOnDone = () => {
+    oceanWorld.showRevealTags = true;
     if (phaseDescend) phaseDescend.classList.add("hidden");
     onDone();
   };
+}
+
+// Kontrol Tab Bar Bawah Floating (Fakta | Legenda | Detail Kru)
+document.querySelectorAll(".oib-tab[data-oib]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.oib;
+    document.querySelectorAll(".oib-tab[data-oib]").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("oib-panel-fact").classList.toggle("hidden", mode !== "fact");
+    document.getElementById("oib-panel-legend").classList.toggle("hidden", mode !== "legend");
+  });
+});
+
+const btnToggleRevealDetail = document.getElementById("btn-toggle-reveal-detail");
+const revealDetailDrawer = document.getElementById("reveal-detail-drawer");
+const btnCloseRevealDetail = document.getElementById("btn-close-reveal-detail");
+if (btnToggleRevealDetail && revealDetailDrawer) {
+  btnToggleRevealDetail.addEventListener("click", () => {
+    const isHidden = revealDetailDrawer.classList.toggle("hidden");
+    btnToggleRevealDetail.classList.toggle("active", !isHidden);
+  });
+}
+if (btnCloseRevealDetail && revealDetailDrawer && btnToggleRevealDetail) {
+  btnCloseRevealDetail.addEventListener("click", () => {
+    revealDetailDrawer.classList.add("hidden");
+    btnToggleRevealDetail.classList.remove("active");
+  });
 }
 
 // ============================================================================

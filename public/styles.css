@@ -2815,3 +2815,139 @@ body.in-gameplay .phone-frame-wrapper.simulated-phone .ocean-stage-container {
   border-radius: 0;
   z-index: 10;
 }
+
+
+/* ==================== FLOATING BOTTOM INSIGHT BAR (OPSI 1 — TANPA TUTUP LAYAR) ==================== */
+.ocean-reveal-dock {
+  position: relative;
+  z-index: 15;
+  margin-top: auto;
+  width: 100%;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 0.85rem 0.9rem;
+  pointer-events: none;
+}
+
+.ocean-reveal-dock > * {
+  pointer-events: auto;
+}
+
+.ocean-insight-bar {
+  background: rgba(4, 15, 32, 0.86);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(56, 189, 248, 0.42);
+  border-radius: 16px;
+  padding: 0.7rem 0.95rem;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+}
+
+.oib-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.oib-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.oib-tab {
+  background: rgba(15, 35, 65, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 0.24rem 0.6rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.oib-tab.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: var(--cyan);
+  color: #ffffff;
+}
+
+.oib-timer {
+  padding: 0.22rem 0.65rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.oib-body {
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.oib-title {
+  display: block;
+  color: #e9d5ff;
+  font-family: var(--font-heading);
+  font-size: 0.94rem;
+  margin-bottom: 0.15rem;
+}
+
+.oib-text {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+}
+
+.oib-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 92px;
+  overflow-y: auto;
+}
+
+.reveal-detail-drawer {
+  background: rgba(4, 15, 32, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 16px;
+  padding: 0.85rem;
+  margin-bottom: 0.55rem;
+  max-height: 46vh;
+  overflow-y: auto;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65);
+}
+
+.reveal-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.compact-results-list {
+  margin-bottom: 0 !important;
+  gap: 0.45rem !important;
+}
+
+.compact-results-list .reveal-row {
+  padding: 0.55rem 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .ocean-reveal-dock {
+    padding: 0 0.55rem 0.65rem;
+  }
+
+  .ocean-insight-bar {
+    padding: 0.55rem 0.75rem;
+  }
+
+  .oib-tab {
+    font-size: 0.68rem;
+    padding: 0.22rem 0.48rem;
+  }
+}
