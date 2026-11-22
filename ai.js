@@ -28,13 +28,36 @@ function extractJsonObject(text) {
 
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    return null;
-  }
+  if (firstBrace === -1) return null;
+
+  const slice =
+    lastBrace > firstBrace
+      ? cleaned.slice(firstBrace, lastBrace + 1)
+      : cleaned.slice(firstBrace);
+
   try {
-    return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    return JSON.parse(slice);
   } catch (e) {
-    return null;
+    // Coba perbaiki trailing comma sebelum ] atau }
+    try {
+      const fixed = slice.replace(/,\s*([\]}])/g, "$1");
+      return JSON.parse(fixed);
+    } catch (e2) {
+      // Jika terpotong di tengah array answers, ekstrak semua objek jawaban yang utuh
+      const answersMatch = slice.match(/"answers"\s*:\s*\[([\s\S]*)/);
+      if (answersMatch) {
+        const items = [];
+        const itemRegex = /\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+)\s*,\s*"fact"\s*:\s*"([^"]*)"\s*\}/g;
+        let m;
+        while ((m = itemRegex.exec(answersMatch[1])) !== null) {
+          items.push({ name: m[1], score: Number(m[2]), fact: m[3] });
+        }
+        if (items.length >= 4) {
+          return { answers: items };
+        }
+      }
+      return null;
+    }
   }
 }
 
@@ -116,19 +139,19 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
 async function generateCategoryWithAI(topic, theme = "umum") {
   const systemPrompt =
     "Kamu adalah kurator konten kuis edukasi PALUNG.IO berbahasa Indonesia. " +
-    "Buatlah kategori trivia terbuka dengan 24 jawaban faktual yang tersebar merata di 4 tingkat kelangkaan: " +
-    "6 jawaban umum (skor 12-32), 7 cukup unik (36-62), 6 langka (66-86), 5 sangat langka (90-99). " +
-    "Balas HANYA JSON valid: " +
-    '{"title": "Sebutkan ...", "hint": "Petunjuk singkat", "educationalNote": "1 kalimat pengantar edukasi", "answers": [{"name": "...", "score": 15, "fact": "1 kalimat fakta unik"}]}.';
+    "Buatlah kategori trivia terbuka dengan 16 jawaban faktual yang tersebar merata di 4 tingkat kelangkaan: " +
+    "4 jawaban umum (skor 12-32), 4 cukup unik (36-62), 4 langka (66-86), 4 sangat langka (90-99). " +
+    "Balas HANYA JSON valid tanpa teks pembuka/penutup: " +
+    '{"title": "Sebutkan ...", "hint": "Petunjuk singkat", "educationalNote": "1 kalimat pengantar edukasi", "answers": [{"name": "...", "score": 15, "fact": "1 kalimat fakta singkat"}]}.';
 
-  const userPrompt = `Buat kategori kuis tentang topik: "${topic}" (tema: ${theme}). Pastikan seluruh fakta akurat dan ramah semua umur.`;
+  const userPrompt = `Buat kategori kuis tentang topik: "${topic}" (tema: ${theme}). Pastikan seluruh fakta akurat, singkat, dan ramah semua umur.`;
 
   const { model, content } = await callCloudWorkerAI(
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
     ],
-    { temperature: 0.35, maxTokens: 2400 }
+    { temperature: 0.3, maxTokens: 3200 }
   );
 
   const parsed = extractJsonObject(content);

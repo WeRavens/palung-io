@@ -401,7 +401,52 @@ function createRoom({
   }
 
   rooms.set(code, room);
+  scheduleLobbyAutoDisband(room);
   return room;
+}
+
+const LOBBY_IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 menit tidak dimulai -> bubar otomatis
+
+function clearLobbyIdleTimer(room) {
+  if (room && room.lobbyIdleTimer) {
+    clearTimeout(room.lobbyIdleTimer);
+    room.lobbyIdleTimer = null;
+  }
+}
+
+function scheduleLobbyAutoDisband(room) {
+  clearLobbyIdleTimer(room);
+  if (!room || room.state !== "LOBBY" || room.isDaily) return;
+  room.lobbyIdleTimer = setTimeout(() => {
+    if (!rooms.has(room.code) || room.state !== "LOBBY") return;
+    clearRoomTimers(room);
+    io.to(room.code).emit("room:disbanded", {
+      code: room.code,
+      reason: "Room dibubarkan otomatis karena tidak dimulai selama lebih dari 15 menit."
+    });
+    rooms.delete(room.code);
+    broadcastPublicRooms();
+  }, LOBBY_IDLE_TIMEOUT_MS);
+}
+
+function getPublicRoomsList() {
+  const list = [];
+  rooms.forEach((r) => {
+    if (r.isPublic && !r.isDaily && r.state === "LOBBY") {
+      list.push({
+        code: r.code,
+        hostName: r.players[0] ? r.players[0].name : "Kapten",
+        playerCount: r.players.length,
+        theme: r.settings.theme,
+        gameMode: r.settings.gameMode
+      });
+    }
+  });
+  return list;
+}
+
+function broadcastPublicRooms() {
+  io.emit("public:rooms:update", getPublicRoomsList());
 }
 
 function addPlayerToRoom(room, { id, name, avatar, isBot = false, botProfile = null }) {
@@ -422,6 +467,7 @@ function addPlayerToRoom(room, { id, name, avatar, isBot = false, botProfile = n
     totalDepth: 0,
     roundDepth: 0,
     readyInRound: false,
+    lobbyReady: isBot, // Host & bot siap; pemain lain menekan tombol Siap/Ready
     oxygen: 100, // Oksigen kapal selam (0-100): jawaban umum menguras, jawaban langka mengisi
     sonarPings: 2, // Sonar Ping: bocoran huruf awal jawaban langka (2x per game)
     sonarUsedRound: 0,
@@ -489,6 +535,7 @@ function serializeRoom(room) {
       totalDepth: p.totalDepth,
       roundDepth: p.roundDepth,
       readyInRound: p.readyInRound,
+      lobbyReady: Boolean(p.lobbyReady || p.id === room.hostId),
       rerollsLeft: p.rerollsLeft,
       oxygen: p.oxygen,
       sonarPings: p.sonarPings,
@@ -502,6 +549,7 @@ function serializeRoom(room) {
 
 function broadcastRoomUpdate(room) {
   io.to(room.code).emit("room:update", serializeRoom(room));
+  broadcastPublicRooms();
 }
 
 function selectCategoriesForRoom(room) {
@@ -1236,12 +1284,41 @@ io.on("connection", (socket) => {
     broadcastRoomUpdate(room);
   });
 
-  // 6. Mulai Permainan / Main Lagi
+  // 6. Mulai Permainan (Hanya Host!) & Tombol Siap/Ready + Chat Ephemeral di Lobby
+  socket.on("lobby:toggleReady", () => {
+    if (!currentRoomCode) return;
+    const room = rooms.get(currentRoomCode);
+    if (!room || room.state !== "LOBBY") return;
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return;
+    player.lobbyReady = !player.lobbyReady;
+    broadcastRoomUpdate(room);
+  });
+
+  socket.on("lobby:chat", ({ text }) => {
+    if (!currentRoomCode) return;
+    const room = rooms.get(currentRoomCode);
+    if (!room || room.state !== "LOBBY") return;
+    const player = room.players.find((p) => p.id === socket.id);
+    const cleanText = String(text || "").trim().slice(0, 160);
+    if (!player || !cleanText) return;
+    // Hanya diteruskan secara real-time di memori (tidak disimpan ke database!)
+    io.to(room.code).emit("lobby:chat", {
+      playerId: player.id,
+      playerName: player.name,
+      playerAvatar: player.avatar,
+      text: cleanText,
+      ts: Date.now()
+    });
+  });
+
   socket.on("game:start", () => {
     if (!currentRoomCode) return;
     const room = rooms.get(currentRoomCode);
     if (!room) return;
+    if (room.hostId !== socket.id) return; // Hanya Host yang bisa memulai!
     if (room.state !== "LOBBY" && room.state !== "GAMEOVER") return;
+    clearLobbyIdleTimer(room);
     startGame(room);
   });
 
@@ -1251,6 +1328,10 @@ io.on("connection", (socket) => {
     if (!room) return;
     clearRoomTimers(room);
     room.state = "LOBBY";
+    room.players.forEach((p) => {
+      if (!p.isBot) p.lobbyReady = p.id === room.hostId;
+    });
+    scheduleLobbyAutoDisband(room);
     broadcastRoomUpdate(room);
   });
 

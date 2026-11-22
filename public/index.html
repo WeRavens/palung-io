@@ -300,11 +300,12 @@
           <div class="lobby-top-actions">
             <button class="btn-secondary" id="btn-leave-lobby">⬅ Keluar</button>
             <button class="btn-start-big" id="btn-start-game">🌊 MULAI MENYELAM!</button>
+            <button class="btn-start-big hidden" id="btn-lobby-ready" style="background:linear-gradient(135deg,#0284c7,#0ea5e9);">✋ SIAP MENYELAM!</button>
           </div>
         </div>
 
         <div class="lobby-grid">
-          <!-- Daftar Penyelam di dalam Room -->
+          <!-- Daftar Penyelam + Chat Sementara di Room -->
           <div class="glass-card lobby-players-card">
             <div class="card-header-flex">
               <h3>🤿 Kru Penyelam di Room (<span id="lobby-player-count">1</span>/8)</h3>
@@ -312,6 +313,21 @@
             </div>
 
             <div id="lobby-players-list" class="lobby-players-grid"></div>
+
+            <!-- Chat Sementara di Lobby (Tidak Disimpan Permanen) -->
+            <div class="lobby-chat-box">
+              <div class="lobby-chat-head">
+                <span>💬 Chat Kru Lobby</span>
+                <small>Sementara • hilang saat room bubar</small>
+              </div>
+              <div id="lobby-chat-messages" class="lobby-chat-messages">
+                <div class="lobby-chat-sys">Selamat datang! Sapa kru lain sambil menunggu Host memulai...</div>
+              </div>
+              <form id="form-lobby-chat" class="lobby-chat-form" autocomplete="off">
+                <input type="text" id="input-lobby-chat" maxlength="160" placeholder="Ketik pesan ke kru..." />
+                <button type="submit" class="btn-small">Kirim</button>
+              </form>
+            </div>
           </div>
 
           <!-- Pengaturan Ekspedisi -->

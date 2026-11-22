@@ -9,7 +9,7 @@ const isCapacitorNative =
   (window.location.hostname === "localhost" && window.location.port !== "3000");
 
 const apiBaseUrl = isCapacitorNative
-  ? localStorage.getItem("palung_server_url") || window.PALUNG_DEFAULT_SERVER || "http://192.168.1.9:3000"
+  ? localStorage.getItem("palung_server_url") || window.PALUNG_DEFAULT_SERVER || "https://palung-io.onrender.com"
   : "";
 
 const socket =
@@ -1165,6 +1165,27 @@ if (socket) {
     document.getElementById("conn-text").textContent = "Mode Mandiri";
     document.getElementById("conn-dot").style.background = "#38bdf8";
   });
+  socket.on("public:rooms:update", (publicRooms) => {
+    const prContainer = document.getElementById("public-rooms-list");
+    if (!prContainer) return;
+    if (!publicRooms || publicRooms.length === 0) {
+      prContainer.innerHTML = `<div class="empty-state">Belum ada room publik di lobby. Klik <strong>Arena Cepat</strong> atau <strong>Buat Room Party</strong>!</div>`;
+      return;
+    }
+    prContainer.innerHTML = publicRooms
+      .map(
+        (r) => `
+        <div class="lb-item">
+          <div class="lb-left">
+            <strong style="color:#facc15;letter-spacing:1px;">${r.code}</strong>
+            <span>• Host: ${escapeHtml(r.hostName)} (${r.playerCount}/8)</span>
+          </div>
+          <button class="btn-small" onclick="joinRoomByCode('${r.code}')">Gabung</button>
+        </div>
+      `
+      )
+      .join("");
+  });
 }
 
 loadHomeInfo();
@@ -1418,7 +1439,21 @@ function renderLobby(room) {
 
   const myId = socket ? socket.id : "me";
   const isHost = room.hostId === myId;
+  const mePlayer = room.players.find((p) => p.id === myId);
   const playersContainer = document.getElementById("lobby-players-list");
+
+  // Hanya Host yang bisa tekan Mulai; Guest hanya bisa tekan Siap/Ready!
+  const btnStart = document.getElementById("btn-start-game");
+  const btnReady = document.getElementById("btn-lobby-ready");
+  if (btnStart) btnStart.classList.toggle("hidden", !isHost);
+  if (btnReady) {
+    btnReady.classList.toggle("hidden", isHost);
+    const isReady = mePlayer && mePlayer.lobbyReady;
+    btnReady.textContent = isReady ? "✅ SUDAH SIAP! (Batal)" : "✋ SIAP MENYELAM!";
+    btnReady.style.background = isReady
+      ? "linear-gradient(135deg,#10b981,#059669)"
+      : "linear-gradient(135deg,#0284c7,#0ea5e9)";
+  }
 
   playersContainer.innerHTML = room.players
     .map(
@@ -1429,12 +1464,18 @@ function renderLobby(room) {
           <div>
             <span class="p-name">${escapeHtml(p.name)} ${p.id === myId ? "(Kamu)" : ""}</span>
             <span class="p-tag">${
-              p.isBot ? "🤖 AI Bot Penyelam" : p.id === room.hostId ? "👑 Kapten Host" : "🤿 Penyelam"
+              p.isBot
+                ? "🤖 AI Bot Siap"
+                : p.id === room.hostId
+                ? "👑 Kapten Host"
+                : p.lobbyReady
+                ? "✅ Siap Menyelam"
+                : "⏳ Menunggu Siap"
             }</span>
           </div>
         </div>
         ${
-          p.isBot
+          p.isBot && isHost
             ? `<button class="btn-remove-bot" onclick="removeBot('${p.id}')" title="Hapus Bot">✕</button>`
             : ""
         }
@@ -1499,6 +1540,47 @@ document.getElementById("btn-start-game").addEventListener("click", () => {
   playDiveLock();
   if (socket) socket.emit("game:start");
 });
+
+const btnLobbyReady = document.getElementById("btn-lobby-ready");
+if (btnLobbyReady) {
+  btnLobbyReady.addEventListener("click", () => {
+    playSonarPing(880, 0.12);
+    triggerHaptic(25);
+    if (socket) socket.emit("lobby:toggleReady");
+  });
+}
+
+const formLobbyChat = document.getElementById("form-lobby-chat");
+if (formLobbyChat) {
+  formLobbyChat.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const inp = document.getElementById("input-lobby-chat");
+    const text = inp.value.trim();
+    if (!text || !socket) return;
+    socket.emit("lobby:chat", { text });
+    inp.value = "";
+  });
+}
+
+if (socket) {
+  socket.on("lobby:chat", ({ playerAvatar, playerName, text }) => {
+    const box = document.getElementById("lobby-chat-messages");
+    if (!box) return;
+    const row = document.createElement("div");
+    row.className = "lobby-chat-msg";
+    row.innerHTML = `<span>${playerAvatar || "🤿"}</span> <strong>${escapeHtml(playerName)}:</strong> ${escapeHtml(text)}`;
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+  });
+
+  socket.on("room:disbanded", ({ reason }) => {
+    currentRoom = null;
+    clearClientTimers();
+    showScreen("home");
+    loadHomeInfo();
+    showToast(`⏰ ${reason || "Room telah dibubarkan."}`);
+  });
+}
 
 // ============================================================================
 // LAYAR PERMAINAN (FASE MENJAWAB & VISUALISASI PALUNG)

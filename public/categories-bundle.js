@@ -1,5 +1,5 @@
 // AUTO-GENERATED MOBILE OFFLINE DATABASE BUNDLE
-window.PALUNG_DEFAULT_SERVER = "http://192.168.1.9:3000";
+window.PALUNG_DEFAULT_SERVER = "https://palung-io.onrender.com";
 window.PALUNG_CATEGORIES = [
   {
     "id": "negara-asia",

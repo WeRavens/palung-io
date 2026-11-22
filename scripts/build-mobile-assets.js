@@ -28,10 +28,10 @@ if (!fs.existsSync(iconsDir)) {
   fs.mkdirSync(iconsDir, { recursive: true });
 }
 
-const detectedLanServer = `http://${getLocalLanIp()}:3000`;
+const detectedLanServer = "https://palung-io.onrender.com";
 
 // 1. Tulis public/categories-bundle.js agar aplikasi mobile bekerja 100% Offline di HP
-// sekaligus tahu alamat IP Server Wi-Fi Lokal untuk Multiplayer di APK!
+// sekaligus otomatis tersambung ke server online Render untuk Multiplayer di APK!
 const bundleContent = `// AUTO-GENERATED MOBILE OFFLINE DATABASE BUNDLE
 window.PALUNG_DEFAULT_SERVER = ${JSON.stringify(detectedLanServer)};
 window.PALUNG_CATEGORIES = ${JSON.stringify(CATEGORIES, null, 2)};
