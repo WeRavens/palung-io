@@ -3342,3 +3342,15 @@ body.in-gameplay .phone-frame-wrapper.simulated-phone .ocean-stage-container {
 .mode-info strong { font-size: 1.02rem; }
 .join-input-row input { min-width: 0; }
 #input-room-code { min-width: 5.5em; text-align: center; letter-spacing: 0.15em; }
+
+/* Bioluminescent Sonar HUD Identity */
+.glass-card {
+  box-shadow: 0 12px 32px rgba(2, 8, 23, 0.55), inset 0 1px 0 rgba(125, 211, 252, 0.12);
+}
+.ocean-hud-top {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+  box-shadow: 0 6px 24px rgba(6, 182, 212, 0.08);
+}
+.input-sonar-wrapper:focus-within {
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.35), 0 0 24px rgba(34, 211, 238, 0.18);
+}

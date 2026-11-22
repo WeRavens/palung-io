@@ -1039,13 +1039,23 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-for (let i = 0; i < 40; i++) {
+const BIO_COLORS = [
+  "125, 211, 252", // sonar cyan
+  "52, 211, 153",  // bioluminescent teal
+  "167, 139, 250"  // abyssal violet
+];
+
+for (let i = 0; i < 48; i++) {
+  const isBio = i % 3 === 0;
   bubbles.push({
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
-    r: 1.5 + Math.random() * 4.5,
-    speed: 0.35 + Math.random() * 0.9,
-    alpha: 0.12 + Math.random() * 0.35
+    r: isBio ? 1.4 + Math.random() * 2.6 : 1.5 + Math.random() * 4.2,
+    speed: (isBio ? 0.2 : 0.35) + Math.random() * 0.85,
+    alpha: (isBio ? 0.22 : 0.1) + Math.random() * 0.32,
+    isBio,
+    colorRgb: isBio ? BIO_COLORS[i % BIO_COLORS.length] : "125, 211, 252",
+    phase: Math.random() * Math.PI * 2
   });
 }
 
@@ -1060,19 +1070,67 @@ function triggerSonarRipple(color = "rgba(56, 189, 248, 0.45)") {
   });
 }
 
+function drawAbyssalSilhouetteLayer(t, baseYRatio, amp, freq, fillStyle) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const baseY = h * baseYRatio;
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  ctx.lineTo(0, baseY);
+  const step = Math.max(24, Math.floor(w / 24));
+  for (let x = 0; x <= w + step; x += step) {
+    const y =
+      baseY +
+      Math.sin(x * freq + t) * amp +
+      Math.cos(x * freq * 0.55 - t * 0.7) * (amp * 0.55);
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+}
+
+let oceanTick = 0;
 function animateOcean() {
+  oceanTick += 0.012;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Ambient Sonar HUD Sweep (lingkaran radar halus di tengah layar)
+  const cx = canvas.width / 2;
+  const cy = canvas.height * 0.46;
+  const maxRadar = Math.min(canvas.width, canvas.height) * 0.42;
+  ctx.save();
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.045)";
+  ctx.lineWidth = 1;
+  for (let ring = 1; ring <= 3; ring++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, (maxRadar * ring) / 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Layered Abyssal Silhouettes (siluet palung laut dalam berlapis)
+  drawAbyssalSilhouetteLayer(oceanTick * 0.6, 0.78, 22, 0.0045, "rgba(7, 24, 48, 0.42)");
+  drawAbyssalSilhouetteLayer(oceanTick * 0.9 + 1.4, 0.86, 18, 0.006, "rgba(3, 13, 29, 0.68)");
 
   bubbles.forEach((b) => {
     b.y -= b.speed;
-    b.x += Math.sin(b.y * 0.02) * 0.3;
+    b.x += Math.sin(b.y * 0.02 + b.phase) * 0.35;
     if (b.y < -10) {
       b.y = canvas.height + 10;
       b.x = Math.random() * canvas.width;
     }
+    const pulse = b.isBio ? 0.65 + 0.35 * Math.sin(oceanTick * 3 + b.phase) : 1;
+    if (b.isBio) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r * 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${b.colorRgb}, ${b.alpha * 0.22 * pulse})`;
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(125, 211, 252, ${b.alpha})`;
+    ctx.fillStyle = `rgba(${b.colorRgb}, ${b.alpha * pulse})`;
     ctx.fill();
   });
 
