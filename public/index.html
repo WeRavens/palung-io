@@ -554,31 +554,66 @@
       <!-- ==================== LAYAR 4: HASIL AKHIR & KARTU SELAM VIRAL ==================== -->
       <section id="screen-gameover" class="screen">
         <div class="gameover-card glass-card">
+          <canvas id="gameover-confetti-canvas" class="gameover-confetti-canvas"></canvas>
+
           <div class="gameover-header">
             <div class="gameover-badge" id="gameover-mode-badge">🏁 EKSPEDISI SELESAI!</div>
             <h1 id="gameover-headline">Rekor Kedalaman Palung Tercapai!</h1>
-            <p id="gameover-subheadline">Berikut adalah hasil penyelaman dan wawasan baru yang berhasil kalian temukan:</p>
+            <p id="gameover-subheadline">Berikut adalah rekor ekspedisi, gelar kru, dan wawasan baru yang kalian temukan:</p>
           </div>
 
-          <!-- Podium / Klasemen Akhir -->
-          <div id="gameover-podium" class="podium-grid"></div>
+          <!-- Tab Navigasi Hasil Akhir (Tetap Rapi & Tidak Penuh di Layar HP) -->
+          <div class="go-tabs-bar">
+            <button type="button" class="go-tab active" data-gotab="podium">🏆 Podium & Kartu</button>
+            <button type="button" class="go-tab" data-gotab="chart">📈 Grafik Selam</button>
+            <button type="button" class="go-tab" data-gotab="log">📖 Log 7 Ronde</button>
+          </div>
 
-          <!-- Kartu Shareable -->
-          <div class="share-section">
-            <div class="share-card-preview">
-              <h3>📲 Kartu Selammu (Siap Bagikan ke Teman!)</h3>
-              <pre id="share-text-box" class="share-pre"></pre>
-              <div class="share-btn-row">
-                <button class="btn-primary" id="btn-copy-share">📋 Salin Kartu</button>
-                <button class="btn-whatsapp" id="btn-share-wa">💬 Bagikan ke WhatsApp</button>
+          <!-- TAB 1: PODIUM BAWAH LAUT + PARTY AWARDS + SHARE POSTER -->
+          <div id="go-panel-podium" class="go-panel active">
+            <!-- Podium Visual #2 | #1 | #3 -->
+            <div id="gameover-podium" class="podium-stage"></div>
+            <!-- Peringkat #4 s/d #8 -->
+            <div id="gameover-runners" class="runners-list"></div>
+
+            <!-- Gelar & Penghargaan Unik Party Awards -->
+            <div id="gameover-awards" class="awards-grid"></div>
+
+            <!-- Kartu Shareable (Teks + Poster PNG Bergambar) -->
+            <div class="share-section">
+              <div class="share-card-preview">
+                <h3>📲 Kartu Selammu (Siap Bagikan!)</h3>
+                <pre id="share-text-box" class="share-pre"></pre>
+                <div class="share-btn-row">
+                  <button type="button" class="btn-primary" id="btn-download-poster">📸 Simpan Gambar Kartu</button>
+                  <button type="button" class="btn-secondary" id="btn-copy-share">📋 Salin Teks</button>
+                  <button type="button" class="btn-whatsapp" id="btn-share-wa">💬 WhatsApp</button>
+                </div>
+              </div>
+
+              <div class="gameover-actions">
+                <button type="button" class="btn-start-big" id="btn-play-again">🔄 Main Lagi</button>
+                <button type="button" class="btn-secondary" id="btn-gameover-lobby">⚙️ Pengaturan Room</button>
+                <button type="button" class="btn-secondary" id="btn-gameover-home">🏠 Beranda Utama</button>
               </div>
             </div>
+          </div>
 
-            <div class="gameover-actions">
-              <button class="btn-start-big" id="btn-play-again">🔄 Main Lagi</button>
-              <button class="btn-secondary" id="btn-gameover-lobby">⚙️ Pengaturan Room</button>
-              <button class="btn-secondary" id="btn-gameover-home">🏠 Beranda Utama</button>
+          <!-- TAB 2: GRAFIK PROFIL SELAM 7 RONDE -->
+          <div id="go-panel-chart" class="go-panel hidden">
+            <div class="chart-card-box">
+              <h3>📈 Profil Penyelaman Ronde 1 → Ronde Akhir</h3>
+              <p class="chart-sub">Garis semakin menukik ke bawah berarti kapal selam semakin dalam!</p>
+              <div class="dive-chart-wrap">
+                <canvas id="dive-profile-canvas"></canvas>
+              </div>
+              <div id="dive-chart-legend" class="dive-chart-legend"></div>
             </div>
+          </div>
+
+          <!-- TAB 3: BUKU LOG EKSPEDISI (REKAP JAWABAN & WAWASAN) -->
+          <div id="go-panel-log" class="go-panel hidden">
+            <div id="gameover-expedition-log" class="expedition-log-list"></div>
           </div>
         </div>
       </section>

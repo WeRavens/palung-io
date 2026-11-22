@@ -124,6 +124,9 @@ function showScreen(screenName) {
   if (screenName !== "game" && typeof setBgmMood === "function") {
     setBgmMood("calm");
   }
+  if (screenName !== "gameover" && typeof stopGameOverConfetti === "function") {
+    stopGameOverConfetti();
+  }
   // Sinkronkan Bottom Navigation Bar
   document.querySelectorAll(".mnav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.action === screenName);
@@ -898,8 +901,14 @@ function revealLocalRound() {
     const isSoleExplorer = p.id === soleId && !isCollision;
 
     let depthGained = baseScore * 10;
-    if (isCollision) depthGained = Math.round(depthGained * 0.5);
-    if (isSoleExplorer) depthGained += 150;
+    if (isCollision) {
+      depthGained = Math.round(depthGained * 0.5);
+      p.collisionsCount = (p.collisionsCount || 0) + 1;
+    }
+    if (isSoleExplorer) {
+      depthGained += 150;
+      p.uniqueBonusCount = (p.uniqueBonusCount || 0) + 1;
+    }
 
     // Sistem Oksigen (sama seperti mode online)
     const suffocating = p.oxygen <= 0;
@@ -964,8 +973,7 @@ function revealLocalRound() {
       fact: a.fact
     }));
 
-  renderGameScreen(currentRoom);
-  handleRoundRevealUI({
+  const revealPayload = {
     round: currentRoom.currentRound,
     roundsTotal: currentRoom.roundsTotal,
     categoryTitle: cat.title,
@@ -974,7 +982,11 @@ function revealLocalRound() {
     rarestGuessed,
     legendaryExamples,
     nextRoundInMs: 13000
-  });
+  };
+  currentRoom.roundHistory.push(revealPayload);
+
+  renderGameScreen(currentRoom);
+  handleRoundRevealUI(revealPayload);
 
   const t = setTimeout(() => {
     if (isLocalOfflineGame) advanceLocalRound();
@@ -992,7 +1004,8 @@ function finishLocalGame() {
     dateKey: today,
     gameMode: currentRoom.settings.gameMode,
     standings,
-    teamTotalDepth: standings.reduce((s, p) => s + p.totalDepth, 0)
+    teamTotalDepth: standings.reduce((s, p) => s + p.totalDepth, 0),
+    roundHistory: currentRoom.roundHistory
   });
 }
 
@@ -2600,11 +2613,410 @@ if (socket) {
 }
 
 // ============================================================================
-// LAYAR GAME OVER & KARTU HASIL SELAM (SHAREABLE CARD & WHATSAPP)
+// LAYAR GAME OVER & FINALE 5-IN-1 (PODIUM, PARTY AWARDS, GRAFIK, LOG, POSTER PNG)
 // ============================================================================
+let lastGameOverPayload = null;
+let confettiRafId = null;
+
+function stopGameOverConfetti() {
+  if (confettiRafId) {
+    cancelAnimationFrame(confettiRafId);
+    confettiRafId = null;
+  }
+}
+
+function startGameOverConfetti() {
+  stopGameOverConfetti();
+  const cCanvas = document.getElementById("gameover-confetti-canvas");
+  if (!cCanvas || !cCanvas.parentElement) return;
+  const cCtx = cCanvas.getContext("2d");
+  const rect = cCanvas.parentElement.getBoundingClientRect();
+  const W = Math.max(300, Math.round(rect.width));
+  const H = Math.max(300, Math.round(rect.height));
+  cCanvas.width = W;
+  cCanvas.height = H;
+
+  const colors = ["#facc15", "#38bdf8", "#10b981", "#c084fc", "#fb7185"];
+  const pieces = Array.from({ length: 42 }, () => ({
+    x: Math.random() * W,
+    y: H + Math.random() * 140,
+    vy: 0.7 + Math.random() * 1.4,
+    vx: (Math.random() - 0.5) * 0.6,
+    r: 2 + Math.random() * 3.5,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    alpha: 0.35 + Math.random() * 0.5
+  }));
+
+  function frame() {
+    if (!screens.gameover.classList.contains("active")) {
+      stopGameOverConfetti();
+      return;
+    }
+    cCtx.clearRect(0, 0, W, H);
+    pieces.forEach((p) => {
+      p.y -= p.vy;
+      p.x += p.vx + Math.sin(p.y * 0.03) * 0.35;
+      if (p.y < -12) {
+        p.y = H + 12;
+        p.x = Math.random() * W;
+      }
+      cCtx.globalAlpha = p.alpha;
+      cCtx.fillStyle = p.color;
+      cCtx.beginPath();
+      cCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      cCtx.fill();
+    });
+    cCtx.globalAlpha = 1;
+    confettiRafId = requestAnimationFrame(frame);
+  }
+  confettiRafId = requestAnimationFrame(frame);
+}
+
+function computePartyAwards(standings) {
+  const awards = [];
+  if (!standings || standings.length === 0) return awards;
+
+  // 1. Pemburu Mutiara (Jawaban satu ronde paling dalam)
+  const withBest = standings.filter((p) => p.bestAnswer);
+  if (withBest.length > 0) {
+    const pearl = [...withBest].sort((a, b) => b.bestAnswer.depthGained - a.bestAnswer.depthGained)[0];
+    awards.push({
+      icon: "💎",
+      title: "Pemburu Mutiara",
+      winner: `${pearl.avatar} ${pearl.name}`,
+      desc: `${pearl.bestAnswer.answerName} (+${formatMeters(pearl.bestAnswer.depthGained)})`
+    });
+  }
+
+  // 2. Magnet Tabrakan
+  const colliders = standings.filter((p) => (p.collisionsCount || 0) > 0);
+  if (colliders.length > 0) {
+    const magnet = [...colliders].sort((a, b) => (b.collisionsCount || 0) - (a.collisionsCount || 0))[0];
+    awards.push({
+      icon: "💥",
+      title: "Magnet Tabrakan",
+      winner: `${magnet.avatar} ${magnet.name}`,
+      desc: `${magnet.collisionsCount}x jawaban sama dengan kru!`
+    });
+  }
+
+  // 3. Serigala Tunggal
+  const soloists = standings.filter((p) => (p.uniqueBonusCount || 0) > 0);
+  if (soloists.length > 0) {
+    const wolf = [...soloists].sort((a, b) => (b.uniqueBonusCount || 0) - (a.uniqueBonusCount || 0))[0];
+    awards.push({
+      icon: "🌟",
+      title: "Serigala Tunggal",
+      winner: `${wolf.avatar} ${wolf.name}`,
+      desc: `${wolf.uniqueBonusCount}x bonus Penemu Tunggal!`
+    });
+  }
+
+  // 4. Paru-Paru Baja (Oksigen tersisa tertinggi)
+  const oxyPlayers = standings.filter((p) => typeof p.oxygen === "number");
+  if (oxyPlayers.length > 0) {
+    const ironLung = [...oxyPlayers].sort((a, b) => (b.oxygen || 0) - (a.oxygen || 0))[0];
+    awards.push({
+      icon: "🫧",
+      title: "Paru-Paru Baja",
+      winner: `${ironLung.avatar} ${ironLung.name}`,
+      desc: `Sisa oksigen ${ironLung.oxygen}% di akhir selam`
+    });
+  }
+  return awards;
+}
+
+function renderDiveProfileChart(payload) {
+  const chartCanvas = document.getElementById("dive-profile-canvas");
+  const legendEl = document.getElementById("dive-chart-legend");
+  if (!chartCanvas || !chartCanvas.parentElement) return;
+
+  const history = payload.roundHistory || [];
+  const standings = payload.standings || [];
+  if (history.length === 0 || standings.length === 0) {
+    legendEl.innerHTML = `<span style="color:#94a3b8">Data grafik belum tersedia.</span>`;
+    return;
+  }
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rect = chartCanvas.parentElement.getBoundingClientRect();
+  const W = Math.max(300, Math.round(rect.width));
+  const H = Math.max(220, Math.round(rect.height));
+  chartCanvas.width = W * dpr;
+  chartCanvas.height = H * dpr;
+  const gCtx = chartCanvas.getContext("2d");
+  gCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Hitung kumulatif tiap pemain per ronde (0 -> R1 -> ... -> RN)
+  const series = standings.map((p, idx) => {
+    const pts = [0];
+    let acc = 0;
+    history.forEach((rd) => {
+      const rObj = (rd.results || []).find((r) => r.playerId === p.id);
+      acc = rObj ? rObj.totalDepth : acc;
+      pts.push(acc);
+    });
+    return {
+      name: p.name,
+      avatar: p.avatar,
+      color: p.color || ["#facc15", "#38bdf8", "#10b981", "#c084fc", "#fb7185"][idx % 5],
+      pts
+    };
+  });
+
+  const maxDepth = Math.max(1000, ...series.flatMap((s) => s.pts));
+  const padL = 50;
+  const padR = 18;
+  const padT = 18;
+  const padB = 28;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const roundsCount = history.length;
+
+  gCtx.clearRect(0, 0, W, H);
+
+  // Grid kedalaman (0m di atas, terdalam di bawah seperti penyelaman asli!)
+  gCtx.font = "600 10px Outfit, sans-serif";
+  gCtx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const dVal = Math.round((maxDepth / 4) * i);
+    const y = padT + (i / 4) * plotH;
+    gCtx.strokeStyle = "rgba(148, 163, 184, 0.16)";
+    gCtx.lineWidth = 1;
+    gCtx.beginPath();
+    gCtx.moveTo(padL, y);
+    gCtx.lineTo(W - padR, y);
+    gCtx.stroke();
+    gCtx.fillStyle = "#94a3b8";
+    gCtx.fillText(`${dVal}m`, padL - 6, y + 3);
+  }
+
+  // Label Ronde X-axis
+  gCtx.textAlign = "center";
+  for (let r = 0; r <= roundsCount; r++) {
+    const x = padL + (r / Math.max(1, roundsCount)) * plotW;
+    gCtx.fillStyle = "#94a3b8";
+    gCtx.fillText(r === 0 ? "0" : `R${r}`, x, H - 8);
+  }
+
+  // Gambar garis menyelam masing-masing pemain
+  series.forEach((s) => {
+    gCtx.strokeStyle = s.color;
+    gCtx.lineWidth = 2.6;
+    gCtx.beginPath();
+    s.pts.forEach((val, rIdx) => {
+      const x = padL + (rIdx / Math.max(1, roundsCount)) * plotW;
+      const y = padT + (val / maxDepth) * plotH;
+      if (rIdx === 0) gCtx.moveTo(x, y);
+      else gCtx.lineTo(x, y);
+    });
+    gCtx.stroke();
+
+    s.pts.forEach((val, rIdx) => {
+      const x = padL + (rIdx / Math.max(1, roundsCount)) * plotW;
+      const y = padT + (val / maxDepth) * plotH;
+      gCtx.fillStyle = s.color;
+      gCtx.beginPath();
+      gCtx.arc(x, y, 3.5, 0, Math.PI * 2);
+      gCtx.fill();
+    });
+  });
+
+  legendEl.innerHTML = series
+    .map(
+      (s) => `
+      <div class="legend-chip">
+        <span class="legend-dot" style="background:${s.color}"></span>
+        <span>${s.avatar} ${escapeHtml(s.name)} (${formatMeters(s.pts[s.pts.length - 1])})</span>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function renderExpeditionLog(payload) {
+  const logEl = document.getElementById("gameover-expedition-log");
+  if (!logEl) return;
+  const history = payload.roundHistory || [];
+  const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
+
+  if (history.length === 0) {
+    logEl.innerHTML = `<div class="empty-state">Log ekspedisi belum tersedia.</div>`;
+    return;
+  }
+
+  logEl.innerHTML = history
+    .map((rd) => {
+      const mine = (rd.results || []).find((r) => r.playerId === myId);
+      const best = (rd.results || [])[0];
+      const leg = (rd.legendaryExamples || [])[0];
+      return `
+        <div class="exp-log-item">
+          <div class="exp-log-head">
+            <span class="exp-log-round">RONDE ${rd.round}</span>
+            <strong style="font-size:0.9rem;">${escapeHtml(rd.categoryTitle)}</strong>
+          </div>
+          <div class="exp-log-compare">
+            <span>🫵 <strong>Kamu:</strong> ${
+              mine && mine.answered
+                ? `${escapeHtml(mine.canonicalName)} (+${formatMeters(mine.depthGained)} ${mine.tier.emoji})`
+                : "Tidak Menjawab (0m)"
+            }</span>
+            ${
+              best && best.playerId !== myId && best.answered
+                ? `<span>• 🏆 <strong>Terdalam:</strong> ${escapeHtml(best.playerName)} — ${escapeHtml(best.canonicalName)} (+${formatMeters(best.depthGained)})</span>`
+                : ""
+            }
+          </div>
+          ${
+            leg
+              ? `<div class="exp-log-legend">
+                  🟡 <strong>Wawasan Legenda: ${escapeHtml(leg.name)} (+${formatMeters(leg.depthMeters)})</strong> — ${escapeHtml(leg.fact)}
+                </div>`
+              : ""
+          }
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function generateSharePosterBlob(payload, me, myRank) {
+  return new Promise((resolve) => {
+    const pCanvas = document.createElement("canvas");
+    pCanvas.width = 720;
+    pCanvas.height = 900;
+    const pCtx = pCanvas.getContext("2d");
+
+    // 1. Latar Samudra Dalam
+    const grad = pCtx.createLinearGradient(0, 0, 0, 900);
+    grad.addColorStop(0, "#0369a1");
+    grad.addColorStop(0.45, "#081c3a");
+    grad.addColorStop(1, "#020617");
+    pCtx.fillStyle = grad;
+    pCtx.fillRect(0, 0, 720, 900);
+
+    // Gelembung dekoratif
+    for (let i = 0; i < 36; i++) {
+      pCtx.beginPath();
+      pCtx.arc(40 + ((i * 73) % 640), 50 + ((i * 97) % 800), 2 + (i % 5), 0, Math.PI * 2);
+      pCtx.fillStyle = "rgba(186, 230, 253, 0.2)";
+      pCtx.fill();
+    }
+
+    // Kartu Bingkai Utama
+    pCtx.strokeStyle = "rgba(250, 204, 21, 0.55)";
+    pCtx.lineWidth = 4;
+    pCtx.beginPath();
+    pCtx.roundRect(36, 36, 648, 828, 32);
+    pCtx.stroke();
+
+    // Header Logo
+    pCtx.fillStyle = "#38bdf8";
+    pCtx.font = "800 22px Outfit, sans-serif";
+    pCtx.textAlign = "center";
+    pCtx.fillText(
+      payload.isDaily ? `PALUNG.IO • DAILY DIVE #${payload.dateKey}` : "PALUNG.IO • SELAM WAWASAN",
+      360,
+      95
+    );
+
+    // Gambar Kapal Selam Ikonik di Tengah Atas
+    drawPalungSubmarine(
+      pCtx,
+      360,
+      205,
+      performance.now(),
+      2.3,
+      true,
+      "#facc15",
+      me.avatar,
+      null,
+      null,
+      false,
+      myRank === 1,
+      2500,
+      false
+    );
+
+    // Nama & Peringkat
+    pCtx.fillStyle = "#ffffff";
+    pCtx.font = "900 38px Outfit, sans-serif";
+    pCtx.fillText(`${me.name}`, 360, 315);
+
+    pCtx.fillStyle = myRank === 1 ? "#facc15" : "#38bdf8";
+    pCtx.font = "800 24px Outfit, sans-serif";
+    pCtx.fillText(`PERINGKAT #${myRank} DARI ${payload.standings.length} PENYELAM`, 360, 355);
+
+    // Kedalaman Raksasa
+    pCtx.fillStyle = "#facc15";
+    pCtx.font = "900 84px Outfit, sans-serif";
+    pCtx.fillText(formatMeters(me.totalDepth), 360, 465);
+
+    // Jejak 7 Ronde (Lingkaran Warna)
+    const tiers = me.historyTiers || [];
+    const tierColMap = {
+      "🟢": "#10b981",
+      "🔵": "#38bdf8",
+      "🟣": "#c084fc",
+      "🟡": "#facc15",
+      "💥": "#f43f5e",
+      "⚫": "#475569"
+    };
+    const gap = 52;
+    const startX = 360 - ((tiers.length - 1) * gap) / 2;
+    tiers.forEach((em, idx) => {
+      const cx = startX + idx * gap;
+      pCtx.beginPath();
+      pCtx.arc(cx, 540, 17, 0, Math.PI * 2);
+      pCtx.fillStyle = tierColMap[em] || "#38bdf8";
+      pCtx.fill();
+      pCtx.font = "18px sans-serif";
+      pCtx.fillText(em, cx, 546);
+    });
+
+    // Kotak Temuan Terlangka
+    pCtx.fillStyle = "rgba(4, 15, 32, 0.85)";
+    pCtx.strokeStyle = "rgba(56, 189, 248, 0.45)";
+    pCtx.lineWidth = 2;
+    pCtx.beginPath();
+    pCtx.roundRect(76, 600, 568, 130, 20);
+    pCtx.fill();
+    pCtx.stroke();
+
+    pCtx.fillStyle = "#94a3b8";
+    pCtx.font = "700 18px Outfit, sans-serif";
+    pCtx.fillText("💎 TEMUAN TERLANGKA", 360, 638);
+    pCtx.fillStyle = "#ffffff";
+    pCtx.font = "900 28px Outfit, sans-serif";
+    pCtx.fillText(
+      me.bestAnswer
+        ? `${me.bestAnswer.answerName} (+${formatMeters(me.bestAnswer.depthGained)})`
+        : "Siap menyelam lebih dalam!",
+      360,
+      686
+    );
+
+    // Footer CTA
+    pCtx.fillStyle = "#7dd3fc";
+    pCtx.font = "700 20px Outfit, sans-serif";
+    pCtx.fillText("Adu wawasan langka di palung-io.onrender.com", 360, 810);
+
+    pCanvas.toBlob((blob) => resolve(blob), "image/png");
+  });
+}
+
 function handleGameOverUI(payload) {
+  lastGameOverPayload = payload;
   showScreen("gameover");
   playRevealFanfare("LEGENDA", false);
+  startGameOverConfetti();
+
+  // Reset tab ke Podium & Kartu
+  document.querySelectorAll(".go-tab").forEach((b) => b.classList.toggle("active", b.dataset.gotab === "podium"));
+  document.getElementById("go-panel-podium").classList.remove("hidden");
+  document.getElementById("go-panel-chart").classList.add("hidden");
+  document.getElementById("go-panel-log").classList.add("hidden");
 
   const isCoop = payload.gameMode === "coop";
   document.getElementById("gameover-mode-badge").textContent = payload.isDaily
@@ -2613,60 +3025,158 @@ function handleGameOverUI(payload) {
     ? "🤝 EKSPEDISI TIM CO-OP SELESAI!"
     : payload.gameMode === "tide"
     ? "🌊 ARUS PASANG SELESAI!"
-    : "🏁 PERTANDINGAN SELESAI!";
+    : "🏁 EKSPEDISI SELESAI!";
 
   if (isCoop) {
     document.getElementById("gameover-headline").textContent = `Total Kedalaman Tim: ${formatMeters(payload.teamTotalDepth)}!`;
   } else {
     const winner = payload.standings[0];
     document.getElementById("gameover-headline").textContent = winner
-      ? `${winner.avatar} ${winner.name} Menjuarai Palung (${formatMeters(winner.totalDepth)})!`
+      ? `👑 ${winner.avatar} ${winner.name} Menjuarai Palung (${formatMeters(winner.totalDepth)})!`
       : "Ekspedisi Selesai!";
   }
 
+  // 1. Render Podium 3 Slot (#1, #2, #3) + Runners (#4+)
+  const top3 = payload.standings.slice(0, 3);
+  const runners = payload.standings.slice(3);
   const podiumEl = document.getElementById("gameover-podium");
-  podiumEl.innerHTML = payload.standings
-    .map(
-      (p, idx) => `
-      <div class="podium-card ${idx === 0 ? "rank-1" : ""}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-          <span style="font-weight:900;color:${idx === 0 ? "#facc15" : "#38bdf8"};">PERINGKAT #${idx + 1}</span>
-          <span style="font-family:var(--font-heading);font-weight:900;font-size:1.25rem;">${formatMeters(p.totalDepth)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.65rem;">
-          <span style="font-size:1.85rem;">${p.avatar}</span>
+  podiumEl.innerHTML = top3
+    .map((p, idx) => {
+      const rank = idx + 1;
+      return `
+        <div class="podium-slot slot-${rank}">
           <div>
-            <strong style="font-size:1.05rem;">${escapeHtml(p.name)}</strong>
-            <div style="font-size:0.85rem;margin-top:2px;">${(p.historyTiers || []).join(" ")}</div>
+            <div class="podium-crown">${rank === 1 ? "👑" : rank === 2 ? "🥈" : "🥉"}</div>
+            <div style="font-size:0.74rem;font-weight:900;color:${rank === 1 ? "#facc15" : "#38bdf8"};">JUARA #${rank}</div>
+            <div class="podium-avatar-big">${p.avatar}</div>
+            <strong style="font-size:1.05rem;display:block;">${escapeHtml(p.name)}</strong>
+          </div>
+          <div>
+            <div class="podium-depth-big">${formatMeters(p.totalDepth)}</div>
+            <div class="podium-tiers-row">${(p.historyTiers || []).join("")}</div>
+            ${
+              p.bestAnswer
+                ? `<div class="podium-best-pill">💎 ${escapeHtml(p.bestAnswer.answerName)} (+${formatMeters(p.bestAnswer.depthGained)})</div>`
+                : ""
+            }
           </div>
         </div>
-        ${
-          p.bestAnswer
-            ? `<div style="font-size:0.78rem;background:rgba(4,13,26,0.75);padding:0.55rem;border-radius:10px;color:#cbd5e1;">
-                💎 <strong>Temuan Terbaik:</strong> ${escapeHtml(p.bestAnswer.answerName)} (+${formatMeters(p.bestAnswer.depthGained)})
-              </div>`
-            : ""
-        }
-      </div>
-    `
-    )
+      `;
+    })
     .join("");
 
+  const runnersEl = document.getElementById("gameover-runners");
+  if (runnersEl) {
+    runnersEl.innerHTML = runners
+      .map(
+        (p, idx) => `
+        <div class="runner-pill">
+          <strong style="color:#94a3b8;">#${idx + 4}</strong>
+          <span>${p.avatar}</span>
+          <strong>${escapeHtml(p.name)}</strong>
+          <span style="color:#38bdf8;font-weight:800;">${formatMeters(p.totalDepth)}</span>
+          <span>${(p.historyTiers || []).join("")}</span>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  // 2. Render Party Awards
+  const awardsEl = document.getElementById("gameover-awards");
+  if (awardsEl) {
+    const awards = computePartyAwards(payload.standings);
+    awardsEl.innerHTML = awards
+      .map(
+        (a) => `
+        <div class="award-card">
+          <span class="award-icon">${a.icon}</span>
+          <div class="award-info">
+            <strong>${escapeHtml(a.title)}</strong>
+            <span>${escapeHtml(a.winner)}</span>
+            <small>${escapeHtml(a.desc)}</small>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  // 3. Render Log 7 Ronde
+  renderExpeditionLog(payload);
+
+  // 4. Teks Shareable
   const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
-  const me = payload.standings.find((p) => p.id === myId) || payload.standings[0];
+  const meIdx = payload.standings.findIndex((p) => p.id === myId);
+  const me = meIdx >= 0 ? payload.standings[meIdx] : payload.standings[0];
   if (me) {
     const shareLines = [
       `🌊 PALUNG.IO — ${payload.isDaily ? `Daily Dive #${payload.dateKey}` : "Selam Wawasan"}`,
-      `${me.avatar} Penyelam: ${me.name}`,
+      `${me.avatar} Penyelam: ${me.name} (Peringkat #${meIdx >= 0 ? meIdx + 1 : 1})`,
       `⚓ Kedalaman Akhir: ${formatMeters(me.totalDepth)}`,
       `📊 Jejak Selam: ${(me.historyTiers || []).join("")}`,
       me.bestAnswer
         ? `💎 Temuan Terlangka: ${me.bestAnswer.answerName} (+${formatMeters(me.bestAnswer.depthGained)})`
         : `💎 Siap menyelam lebih dalam!`,
-      `Adu wawasan langka di PALUNG.IO!`
+      `Main gratis di https://palung-io.onrender.com`
     ];
     document.getElementById("share-text-box").textContent = shareLines.join("\n");
   }
+}
+
+// Switch Tab di Game Over
+document.querySelectorAll(".go-tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.gotab;
+    document.querySelectorAll(".go-tab").forEach((b) => b.classList.toggle("active", b === btn));
+    document.getElementById("go-panel-podium").classList.toggle("hidden", target !== "podium");
+    document.getElementById("go-panel-chart").classList.toggle("hidden", target !== "chart");
+    document.getElementById("go-panel-log").classList.toggle("hidden", target !== "log");
+    if (target === "chart" && lastGameOverPayload) {
+      setTimeout(() => renderDiveProfileChart(lastGameOverPayload), 40);
+    }
+  });
+});
+
+// Download / Bagikan Poster PNG Kartu Selam
+const btnDownloadPoster = document.getElementById("btn-download-poster");
+if (btnDownloadPoster) {
+  btnDownloadPoster.addEventListener("click", async () => {
+    if (!lastGameOverPayload) return;
+    const myId = isLocalOfflineGame ? "me" : socket ? socket.id : "me";
+    const meIdx = lastGameOverPayload.standings.findIndex((p) => p.id === myId);
+    const me = meIdx >= 0 ? lastGameOverPayload.standings[meIdx] : lastGameOverPayload.standings[0];
+    const rank = meIdx >= 0 ? meIdx + 1 : 1;
+
+    btnDownloadPoster.disabled = true;
+    btnDownloadPoster.textContent = "⏳ Membuat Gambar...";
+    try {
+      const blob = await generateSharePosterBlob(lastGameOverPayload, me, rank);
+      if (blob) {
+        const file = new File([blob], "PALUNG-IO-Rekor.png", { type: "image/png" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: "Rekor Selam PALUNG.IO",
+            text: `Saya mencapai kedalaman ${formatMeters(me.totalDepth)} di PALUNG.IO!`,
+            files: [file]
+          });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "PALUNG-IO-Rekor.png";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1500);
+          showToast("📸 Poster Kartu Selam berhasil diunduh!");
+        }
+      }
+    } catch (e) {
+      showToast("📸 Poster siap dibagikan!");
+    } finally {
+      btnDownloadPoster.disabled = false;
+      btnDownloadPoster.textContent = "📸 Simpan Gambar Kartu";
+    }
+  });
 }
 
 if (socket) {
