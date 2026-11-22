@@ -690,6 +690,24 @@ function endRoundAndReveal(room) {
 
   const currentCat = room.selectedCategories[room.currentRound - 1];
 
+  // Jika ada pemain manusia yang AFK / terputus dan belum mengirim jawaban,
+  // Bot otomatis menggantikan dengan jawaban umum/biasa (skor <= 45, bukan super langka).
+  if (currentCat) {
+    room.players.forEach((p) => {
+      if (!p.isBot && !room.roundSubmissions[p.id]) {
+        const afkMatch = pickBotAnswer({ style: "safe" }, currentCat, true);
+        if (afkMatch) {
+          room.roundSubmissions[p.id] = {
+            rawInput: afkMatch.canonicalName,
+            match: afkMatch,
+            aiModelUsed: "Bot AFK",
+            isAfkBot: true
+          };
+        }
+      }
+    });
+  }
+
   // Hitung frekuensi tiap jawaban canonical di dalam room untuk mendeteksi TABRAKAN!
   const canonicalCounts = {};
   Object.values(room.roundSubmissions).forEach((sub) => {
@@ -1081,20 +1099,39 @@ app.post("/api/categories/custom", (req, res) => {
 io.on("connection", (socket) => {
   let currentRoomCode = null;
 
-  function leaveCurrentRoom() {
+  function leaveCurrentRoom(isDisconnect = false) {
     if (!currentRoomCode) return;
     const room = rooms.get(currentRoomCode);
     if (room) {
+      const humanPlayers = room.players.filter((p) => !p.isBot);
+      if (isDisconnect && room.state !== "LOBBY") {
+        const player = room.players.find((p) => p.id === socket.id);
+        if (player) {
+          player.disconnected = true;
+          player.disconnectedAt = Date.now();
+          broadcastRoomUpdate(room);
+        }
+        currentRoomCode = null;
+        return;
+      }
+
+      if (!isDisconnect && room.state !== "LOBBY" && humanPlayers.length > 1) {
+        socket.emit("room:leave:blocked", {
+          message: "Tidak bisa keluar saat permainan multiplayer sedang berlangsung!"
+        });
+        return;
+      }
+
       room.players = room.players.filter((p) => p.id !== socket.id);
       socket.leave(currentRoomCode);
 
-      const humanPlayers = room.players.filter((p) => !p.isBot);
-      if (humanPlayers.length === 0) {
+      const remainingHumans = room.players.filter((p) => !p.isBot);
+      if (remainingHumans.length === 0) {
         clearRoomTimers(room);
         rooms.delete(currentRoomCode);
       } else {
         if (room.hostId === socket.id) {
-          room.hostId = humanPlayers[0].id;
+          room.hostId = remainingHumans[0].id;
         }
         broadcastRoomUpdate(room);
         checkIfAllPlayersReady(room);
@@ -1105,7 +1142,7 @@ io.on("connection", (socket) => {
   }
 
   // 1. Buat Room Baru
-  socket.on("room:create", ({ name, avatar, isPublic, settings }, callback) => {
+  socket.on("room:create", ({ name, avatar, isPublic, settings, clientId }, callback) => {
     leaveCurrentRoom();
     const room = createRoom({
       hostSocketId: socket.id,
@@ -1115,6 +1152,7 @@ io.on("connection", (socket) => {
       isDaily: false,
       settings: settings || {}
     });
+    if (room.players[0] && clientId) room.players[0].clientId = clientId;
     currentRoomCode = room.code;
     socket.join(room.code);
     broadcastRoomUpdate(room);
@@ -1496,12 +1534,78 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("session:reconnect", ({ clientId }, callback) => {
+    if (!clientId) {
+      if (typeof callback === "function") callback({ success: false });
+      return;
+    }
+    let foundRoom = null;
+    let foundPlayer = null;
+    for (const r of rooms.values()) {
+      if (r.state === "LOBBY") continue;
+      const p = r.players.find((pl) => !pl.isBot && pl.clientId === clientId);
+      if (p) {
+        foundRoom = r;
+        foundPlayer = p;
+        break;
+      }
+    }
+    if (!foundRoom || !foundPlayer) {
+      if (typeof callback === "function") callback({ success: false });
+      return;
+    }
+
+    const oldId = foundPlayer.id;
+    foundPlayer.id = socket.id;
+    foundPlayer.disconnected = false;
+    if (foundRoom.hostId === oldId) {
+      foundRoom.hostId = socket.id;
+    }
+    if (foundRoom.roundSubmissions && foundRoom.roundSubmissions[oldId]) {
+      foundRoom.roundSubmissions[socket.id] = foundRoom.roundSubmissions[oldId];
+      delete foundRoom.roundSubmissions[oldId];
+    }
+
+    currentRoomCode = foundRoom.code;
+    socket.join(foundRoom.code);
+    broadcastRoomUpdate(foundRoom);
+
+    const currentCat = foundRoom.selectedCategories[foundRoom.currentRound - 1];
+    const roundData =
+      foundRoom.state === "PLAYING" && currentCat
+        ? {
+            round: foundRoom.currentRound,
+            totalRounds: foundRoom.settings.totalRounds,
+            category: {
+              id: currentCat.id,
+              title: currentCat.title,
+              hint: currentCat.hint,
+              theme: currentCat.theme
+            },
+            durationSeconds: Math.max(
+              3,
+              Math.ceil(((foundRoom.roundEndsAt || Date.now()) - Date.now()) / 1000)
+            ),
+            room: serializeRoom(foundRoom),
+            alreadySubmitted: Boolean(foundRoom.roundSubmissions[socket.id])
+          }
+        : null;
+
+    if (typeof callback === "function") {
+      callback({
+        success: true,
+        room: serializeRoom(foundRoom),
+        roundData
+      });
+    }
+  });
+
   socket.on("room:leave", () => {
-    leaveCurrentRoom();
+    leaveCurrentRoom(false);
   });
 
   socket.on("disconnect", () => {
-    leaveCurrentRoom();
+    leaveCurrentRoom(true);
   });
 });
 

@@ -1156,10 +1156,35 @@ async function loadHomeInfo() {
   }
 }
 
+function getClientId() {
+  let cid = localStorage.getItem("palung_client_id");
+  if (!cid) {
+    cid = "cid_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem("palung_client_id", cid);
+  }
+  return cid;
+}
+
 if (socket) {
   socket.on("connect", () => {
     document.getElementById("conn-text").textContent = "Server Online";
     document.getElementById("conn-dot").style.background = "#10b981";
+    socket.emit("session:reconnect", { clientId: getClientId() }, (res) => {
+      if (res && res.success && res.room) {
+        currentRoom = res.room;
+        isLocalOfflineGame = false;
+        showToast("🔄 Tersambung kembali ke permainan!");
+        if (res.room.state === "PLAYING" && res.roundData) {
+          startRoundScreen(res.roundData);
+        } else if (res.room.state === "LOBBY") {
+          renderLobby(currentRoom);
+          showScreen("lobby");
+        }
+      }
+    });
+  });
+  socket.on("room:leave:blocked", ({ message }) => {
+    showToast(message || "Tidak bisa keluar saat permainan multiplayer sedang berlangsung!");
   });
   socket.on("disconnect", () => {
     document.getElementById("conn-text").textContent = "Mode Mandiri";
@@ -1366,7 +1391,7 @@ document.getElementById("btn-create-room").addEventListener("click", () => {
   }
 
   isLocalOfflineGame = false;
-  socket.emit("room:create", { name, avatar, isPublic: true }, (res) => {
+  socket.emit("room:create", { name, avatar, isPublic: true, clientId: getClientId() }, (res) => {
     if (res && res.success) {
       currentRoom = res.room;
       renderLobby(currentRoom);
@@ -1391,7 +1416,7 @@ window.joinRoomByCode = function (code) {
   }
   const { name, avatar } = getIdentity();
   isLocalOfflineGame = false;
-  socket.emit("room:join", { code, name, avatar }, (res) => {
+  socket.emit("room:join", { code, name, avatar, clientId: getClientId() }, (res) => {
     if (!res || !res.success) {
       playErrorBuzz();
       showToast(res ? res.error : "Gagal bergabung ke room.");
