@@ -120,7 +120,7 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
 
   const parsed = extractJsonObject(content);
   if (!parsed || typeof parsed.valid !== "boolean") {
-    return null;
+    throw new Error("Format respons AI tidak valid saat menilai jawaban.");
   }
 
   if (!parsed.valid) {

@@ -1349,6 +1349,7 @@ io.on("connection", (socket) => {
 
     let match = matchCategoryAnswer(currentCat, answer);
     let aiModelUsed = null;
+    let aiError = false;
 
     if (!match && ai.isEnabled() && (answer || "").trim().length >= 2) {
       try {
@@ -1375,6 +1376,7 @@ io.on("connection", (socket) => {
           aiModelUsed = aiVerdict.modelUsed;
         }
       } catch (err) {
+        aiError = true;
         console.warn("[AI] Gagal memvalidasi jawaban:", err.message);
       }
     }
@@ -1383,7 +1385,10 @@ io.on("connection", (socket) => {
       if (typeof callback === "function") {
         callback({
           valid: false,
-          message: `Sonar tidak mendeteksi "${(answer || "").trim()}" di kategori ini. Coba istilah lain!`
+          aiError,
+          message: aiError
+            ? "Sonar AI sedang sibuk/gangguan, coba kirim ulang atau gunakan jawaban lain!"
+            : `Sonar tidak mendeteksi "${(answer || "").trim()}" di kategori ini. Coba istilah lain!`
         });
       }
       return;
