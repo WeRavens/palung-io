@@ -120,6 +120,7 @@ function showScreen(screenName) {
   if (screens[screenName]) {
     screens[screenName].classList.add("active");
   }
+  document.body.classList.toggle("in-gameplay", screenName === "game");
   if (screenName !== "game" && typeof setBgmMood === "function") {
     setBgmMood("calm");
   }
@@ -477,9 +478,11 @@ function playRevealFanfare(tierId, isCollision) {
   }
 }
 
-document.getElementById("btn-sound-toggle").addEventListener("click", (e) => {
+document.getElementById("btn-sound-toggle").addEventListener("click", () => {
   soundEnabled = !soundEnabled;
-  e.currentTarget.textContent = soundEnabled ? "🎵🔊" : "🔇";
+  document.getElementById("btn-sound-toggle").textContent = soundEnabled ? "🎵🔊" : "🔇";
+  const hudSound = document.getElementById("btn-hud-sound");
+  if (hudSound) hudSound.textContent = soundEnabled ? "🔊" : "🔇";
   const ctx = getAudioCtx();
   if (bgmMasterGain && ctx) {
     bgmMasterGain.gain.setTargetAtTime(soundEnabled ? 0.55 : 0.0001, ctx.currentTime, 0.08);
@@ -492,6 +495,20 @@ document.getElementById("btn-sound-toggle").addEventListener("click", (e) => {
     showToast("🔇 Backsound & Suara Dimatikan");
   }
 });
+
+const btnHudSound = document.getElementById("btn-hud-sound");
+if (btnHudSound) {
+  btnHudSound.addEventListener("click", () => {
+    document.getElementById("btn-sound-toggle").click();
+  });
+}
+
+const btnHudMenu = document.getElementById("btn-hud-menu");
+if (btnHudMenu) {
+  btnHudMenu.addEventListener("click", () => {
+    document.getElementById("btn-home-logo").click();
+  });
+}
 
 // ============================================================================
 // SIMULATOR MODE LAYAR HP (DI DESKTOP) & BOTTOM NAV BAR

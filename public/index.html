@@ -381,11 +381,14 @@
           <!-- Kanvas Lautan Berkesinambungan (Selalu Aktif dari Ronde 1 s/d 7) -->
           <canvas id="persistent-ocean-canvas"></canvas>
 
-          <!-- Overlay HUD Atas Minimalis (DEPTH | 7 KOTAK RONDE | OKSIGEN & KRU) -->
+          <!-- Overlay HUD Atas Minimalis (☰ + DEPTH | 7 KOTAK RONDE | OKSIGEN + KRU + 🔊) -->
           <div class="ocean-hud-top">
-            <div class="ohud-box ohud-depth">
-              <span class="ohud-label">KEDALAMAN</span>
-              <strong class="ohud-value" id="hud-my-depth">0m</strong>
+            <div class="ohud-left-group">
+              <button type="button" class="ohud-mini-btn" id="btn-hud-menu" title="Keluar ke Beranda">☰</button>
+              <div class="ohud-box ohud-depth">
+                <span class="ohud-label">KEDALAMAN</span>
+                <strong class="ohud-value" id="hud-my-depth">0m</strong>
+              </div>
             </div>
 
             <div class="ohud-center">
@@ -409,6 +412,7 @@
               <button type="button" class="ohud-crew-btn" id="btn-toggle-crew-drawer" title="Lihat Peringkat Kru">
                 👥 <span id="hud-crew-count">4</span>
               </button>
+              <button type="button" class="ohud-mini-btn" id="btn-hud-sound" title="Suara & Backsound On/Off">🔊</button>
             </div>
           </div>
 
