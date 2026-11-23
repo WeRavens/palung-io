@@ -1145,6 +1145,10 @@ function drawAbyssalSilhouetteLayer(t, baseYRatio, amp, freq, fillStyle) {
 
 let oceanTick = 0;
 function animateOcean() {
+  if (screens.game && screens.game.classList.contains("active")) {
+    requestAnimationFrame(animateOcean);
+    return;
+  }
   oceanTick += 0.012;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
