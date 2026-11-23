@@ -149,6 +149,7 @@ async function generateCategoryWithAI(topic, theme = "umum") {
     "Kamu adalah kurator konten kuis edukasi PALUNG.IO berbahasa Indonesia. " +
     "Buatlah kategori trivia terbuka dengan 16 jawaban faktual yang tersebar merata di 4 tingkat kelangkaan: " +
     "4 jawaban umum (skor 12-32), 4 cukup unik (36-62), 4 langka (66-86), 4 sangat langka (90-99). " +
+    'Judul "title" harus berupa pertanyaan singkat yang alami dimulai dengan "Sebutkan ..." (tanpa menyebut angka 16 atau kata "sesuai fakta"). ' +
     "Balas HANYA JSON valid tanpa teks pembuka/penutup: " +
     '{"title": "Sebutkan ...", "hint": "Petunjuk singkat", "educationalNote": "1 kalimat pengantar edukasi", "answers": [{"name": "...", "score": 15, "fact": "1 kalimat fakta singkat"}]}.';
 

@@ -609,12 +609,18 @@ function selectCategoriesForRoom(room) {
     filtered = all;
   }
 
-  // Prioritaskan soal yang belum muncul baru-baru ini agar setiap pertandingan terasa segar!
+  // Prioritaskan soal AI baru & soal yang belum muncul baru-baru ini agar setiap pertandingan terasa segar!
   const recentSet = new Set(recentPlayedCategoryIds);
-  const freshPool = shuffleArray(filtered.filter((c) => !recentSet.has(c.id)));
+  const aiFresh = shuffleArray(filtered.filter((c) => String(c.id).startsWith("ai-") && !recentSet.has(c.id)));
+  const staticFresh = shuffleArray(filtered.filter((c) => !String(c.id).startsWith("ai-") && !recentSet.has(c.id)));
   const stalePool = shuffleArray(filtered.filter((c) => recentSet.has(c.id)));
-  const combined = [...freshPool, ...stalePool];
-  const picked = combined.slice(0, room.settings.roundsTotal);
+
+  // Pastikan minimal 3 soal dari AI masuk ke dalam ronde jika tersedia
+  const targetAiCount = Math.min(aiFresh.length, Math.max(2, Math.floor(room.settings.roundsTotal / 2)));
+  const pickedAi = aiFresh.slice(0, targetAiCount);
+  const remainingNeeded = Math.max(0, room.settings.roundsTotal - pickedAi.length);
+  const restPool = [...staticFresh, ...aiFresh.slice(targetAiCount), ...stalePool];
+  const picked = shuffleArray([...pickedAi, ...restPool.slice(0, remainingNeeded)]);
 
   picked.forEach((c) => {
     const idx = recentPlayedCategoryIds.indexOf(c.id);
@@ -1771,9 +1777,10 @@ server.listen(PORT, () => {
   console.log(`🌊 Server PALUNG.IO berjalan di http://localhost:${PORT}`);
   // Jika bank soal AI masih sedikit, otomatis generate bertahap di background
   setTimeout(async () => {
-    if ((runtimeData.customCategories || []).length < 8) {
-      await expandQuestionBankWithAI("all");
+    const needed = Math.max(0, 12 - (runtimeData.customCategories || []).length);
+    const batch = Math.min(5, needed);
+    for (let i = 0; i < batch; i++) {
       await expandQuestionBankWithAI("all");
     }
-  }, 5000);
+  }, 4000);
 });
