@@ -182,6 +182,51 @@ async function generateCategoryWithAI(topic, theme = "umum") {
   };
 }
 
+const RANDOM_TOPIC_SEEDS = [
+  { topic: "Benda & Fenomena di Luar Angkasa", theme: "sains" },
+  { topic: "Makanan Fermentasi dari Berbagai Negara", theme: "kuliner" },
+  { topic: "Alat Musik Tradisional Dunia & Nusantara", theme: "budaya" },
+  { topic: "Penemuan Bersejarah yang Mengubah Dunia", theme: "sejarah" },
+  { topic: "Hewan Nokturnal yang Aktif di Malam Hari", theme: "sains" },
+  { topic: "Danau Terkenal di Dunia", theme: "geografi" },
+  { topic: "Unsur Kimia dalam Tabel Periodik", theme: "sains" },
+  { topic: "Rempah-Rempah Khas Nusantara & Dunia", theme: "kuliner" },
+  { topic: "Tumbuhan Unik & Langka", theme: "sains" },
+  { topic: "Bahasa Daerah di Indonesia", theme: "nusantara" },
+  { topic: "Gunung Berapi Aktif di Dunia", theme: "geografi" },
+  { topic: "Kerajaan Kuno di Nusantara", theme: "sejarah" },
+  { topic: "Batu Permata & Mineral Alam", theme: "sains" },
+  { topic: "Minuman Tradisional Khas Indonesia", theme: "kuliner" },
+  { topic: "Transportasi Laut & Jenis Kapal", theme: "umum" },
+  { topic: "Organ & Bagian Tubuh Manusia", theme: "sains" },
+  { topic: "Dinosaurus & Hewan Purba", theme: "sains" },
+  { topic: "Kota Pelabuhan Bersejarah di Dunia", theme: "geografi" },
+  { topic: "Burung Pemangsa & Burung Langka", theme: "sains" },
+  { topic: "Olahraga Air & Olimpiade", theme: "umum" },
+  { topic: "Tarian Tradisional Nusantara", theme: "nusantara" },
+  { topic: "Buah-Buahan Tropis Eksotis", theme: "kuliner" },
+  { topic: "Ikan & Biota Laut Dalam", theme: "sains" },
+  { topic: "Situs Warisan Dunia UNESCO", theme: "geografi" },
+  { topic: "Senjata Tradisional Nusantara", theme: "nusantara" },
+  { topic: "Planet, Bulan & Satelit Alami Tata Surya", theme: "sains" },
+  { topic: "Cabang Ilmu Sains & Kedokteran", theme: "sains" },
+  { topic: "Kue & Jajanan Pasar Indonesia", theme: "kuliner" }
+];
+
+async function generateRandomCategoryWithAI(existingTitles = [], preferredTheme = "all") {
+  const lowerSet = new Set(existingTitles.map((t) => String(t).toLowerCase()));
+  let pool = RANDOM_TOPIC_SEEDS.filter(
+    (s) =>
+      (preferredTheme === "all" || s.theme === preferredTheme) &&
+      !lowerSet.has(s.topic.toLowerCase()) &&
+      ![...lowerSet].some((ex) => ex.includes(s.topic.split(" ")[0].toLowerCase()))
+  );
+  if (pool.length === 0) pool = RANDOM_TOPIC_SEEDS;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  const result = await generateCategoryWithAI(pick.topic, pick.theme);
+  return { ...result, theme: pick.theme };
+}
+
 function getAiStatus() {
   return {
     enabled: isEnabled(),
@@ -197,5 +242,6 @@ module.exports = {
   isEnabled,
   validateAnswerWithAI,
   generateCategoryWithAI,
+  generateRandomCategoryWithAI,
   getAiStatus
 };

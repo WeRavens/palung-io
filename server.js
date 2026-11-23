@@ -556,6 +556,46 @@ function broadcastRoomUpdate(room) {
   broadcastPublicRooms();
 }
 
+const recentPlayedCategoryIds = [];
+let isExpandingAiBank = false;
+
+function shuffleArray(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+async function expandQuestionBankWithAI(preferredTheme = "all") {
+  if (!ai.isEnabled() || isExpandingAiBank) return;
+  if ((runtimeData.customCategories || []).length >= 50) return;
+  isExpandingAiBank = true;
+  try {
+    const existingTitles = getAllCategories().map((c) => c.title);
+    const generated = await ai.generateRandomCategoryWithAI(existingTitles, preferredTheme);
+    if (!generated || !Array.isArray(generated.answers) || generated.answers.length < 4) return;
+    if (!runtimeData.customCategories) runtimeData.customCategories = [];
+    const newCat = {
+      id: `ai-auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      theme: generated.theme || "umum",
+      title: generated.title,
+      hint: generated.hint,
+      educationalNote: generated.educationalNote,
+      createdBy: "Sonar AI Auto",
+      answers: generated.answers
+    };
+    runtimeData.customCategories.push(newCat);
+    saveRuntimeData();
+    console.log(`[AI Bank] Kategori baru ditambahkan otomatis: "${newCat.title}" (${newCat.answers.length} jawaban via ${generated.modelUsed})`);
+  } catch (err) {
+    console.warn("[AI Bank] Gagal menambah soal otomatis:", err.message);
+  } finally {
+    isExpandingAiBank = false;
+  }
+}
+
 function selectCategoriesForRoom(room) {
   if (room.isDaily) {
     return getDailyCategories(getTodayKey());
@@ -568,8 +608,22 @@ function selectCategoriesForRoom(room) {
   if (filtered.length < room.settings.roundsTotal) {
     filtered = all;
   }
-  const shuffled = [...filtered].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, room.settings.roundsTotal);
+
+  // Prioritaskan soal yang belum muncul baru-baru ini agar setiap pertandingan terasa segar!
+  const recentSet = new Set(recentPlayedCategoryIds);
+  const freshPool = shuffleArray(filtered.filter((c) => !recentSet.has(c.id)));
+  const stalePool = shuffleArray(filtered.filter((c) => recentSet.has(c.id)));
+  const combined = [...freshPool, ...stalePool];
+  const picked = combined.slice(0, room.settings.roundsTotal);
+
+  picked.forEach((c) => {
+    const idx = recentPlayedCategoryIds.indexOf(c.id);
+    if (idx !== -1) recentPlayedCategoryIds.splice(idx, 1);
+    recentPlayedCategoryIds.push(c.id);
+    if (recentPlayedCategoryIds.length > 16) recentPlayedCategoryIds.shift();
+  });
+
+  return picked;
 }
 
 function startGame(room) {
@@ -579,6 +633,9 @@ function startGame(room) {
   room.roundHistory = [];
   room.selectedCategories = selectCategoriesForRoom(room);
   room.settings.roundsTotal = room.selectedCategories.length;
+
+  // Perbanyak soal di background menggunakan Cloudflare Worker AI tanpa menunda mulai game
+  expandQuestionBankWithAI(room.settings.theme || "all");
 
   room.players.forEach((p) => {
     p.totalDepth = 0;
@@ -1712,4 +1769,11 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🌊 Server PALUNG.IO berjalan di http://localhost:${PORT}`);
+  // Jika bank soal AI masih sedikit, otomatis generate bertahap di background
+  setTimeout(async () => {
+    if ((runtimeData.customCategories || []).length < 8) {
+      await expandQuestionBankWithAI("all");
+      await expandQuestionBankWithAI("all");
+    }
+  }, 5000);
 });
