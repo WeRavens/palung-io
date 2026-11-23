@@ -818,6 +818,28 @@ function advanceLocalRound() {
     category: currentRoom.category
   });
 
+  // Serangan Tengah Ronde (Panic Bite) di mode Teror Megalodon Offline
+  if (currentRoom.settings && currentRoom.settings.gameMode === "puffer") {
+    const panicT = setTimeout(() => {
+      if (!isLocalOfflineGame || currentRoom.state !== "PLAYING") return;
+      const me = currentRoom.players.find((p) => p.id === "me");
+      if (typeof oceanWorld !== "undefined") {
+        oceanWorld.megalodonPanicStart = performance.now();
+      }
+      if (me && !currentRoom.roundSubmissions["me"]) {
+        me.oxygen = Math.max(0, (me.oxygen || 100) - 10);
+        renderGameScreen(currentRoom);
+        if (typeof oceanWorld !== "undefined") oceanWorld.shakeUntil = performance.now() + 450;
+        triggerHaptic([80, 40, 100]);
+        playSonarPing(130, 0.25);
+        showToast("🦈 MEGALODON MELINTAS! Belum mengunci jawaban (-10% O₂)");
+      } else {
+        showToast("🦈 Megalodon melintas! Kapalmu sudah senyap & aman.");
+      }
+    }, 12500);
+    localBotTimeouts.push(panicT);
+  }
+
   // Jadwalkan jawaban 3 AI Bot di dalam HP
   currentRoom.players
     .filter((p) => p.isBot)
@@ -973,6 +995,35 @@ function revealLocalRound() {
     });
   });
 
+  let pufferEvent = null;
+  if (currentRoom.settings && currentRoom.settings.gameMode === "puffer" && results.length >= 2) {
+    const noisyCandidates = results
+      .filter((r) => !r.answered || r.isCollision || r.baseScore <= 45)
+      .sort((a, b) => {
+        if (a.answered !== b.answered) return a.answered ? 1 : -1;
+        if (a.isCollision !== b.isCollision) return a.isCollision ? -1 : 1;
+        return a.baseScore - b.baseScore;
+      });
+    const victimRes = noisyCandidates[0];
+    const victimPlayer = victimRes
+      ? currentRoom.players.find((p) => p.id === victimRes.playerId)
+      : null;
+    if (victimPlayer) {
+      victimPlayer.totalDepth = Math.max(0, victimPlayer.totalDepth - 150);
+      victimPlayer.oxygen = Math.max(0, victimPlayer.oxygen - 18);
+      victimRes.depthGained = Math.max(0, victimRes.depthGained - 150);
+      victimRes.totalDepth = victimPlayer.totalDepth;
+      victimRes.oxygenAfter = victimPlayer.oxygen;
+      victimRes.oxygenDelta -= 18;
+      victimRes.pufferExploded = true;
+      pufferEvent = {
+        victimId: victimPlayer.id,
+        victimName: victimPlayer.name,
+        victimAvatar: victimPlayer.avatar
+      };
+    }
+  }
+
   results.sort((a, b) => b.depthGained - a.depthGained);
 
   const myRes = results.find((r) => r.playerId === "me");
@@ -995,6 +1046,7 @@ function revealLocalRound() {
     educationalNote: cat.educationalNote,
     results,
     rarestGuessed,
+    pufferEvent,
     legendaryExamples,
     nextRoundInMs: 13000
   };
@@ -1849,6 +1901,14 @@ function handleRoundStartUI(payload) {
   }
   if (typeof oceanWorld !== "undefined") {
     oceanWorld.showRevealTags = false;
+    oceanWorld.rarestBanner = null;
+    oceanWorld.pufferVictimId = null;
+    if (payload.category) {
+      oceanWorld.currentPrompt = {
+        title: payload.category.title || "",
+        theme: (payload.category.theme || "").toUpperCase()
+      };
+    }
   }
   const revDrawer = document.getElementById("reveal-detail-drawer");
   if (revDrawer) revDrawer.classList.add("hidden");
@@ -1917,6 +1977,20 @@ if (socket) {
     oceanWorld.rarestBanner = null;
     handleRoundStartUI(payload);
   });
+  socket.on("megalodon:panic", ({ bittenIds }) => {
+    if (typeof oceanWorld !== "undefined") {
+      oceanWorld.megalodonPanicStart = performance.now();
+    }
+    const myId = socket.id;
+    if (Array.isArray(bittenIds) && bittenIds.includes(myId)) {
+      if (typeof oceanWorld !== "undefined") oceanWorld.shakeUntil = performance.now() + 450;
+      triggerHaptic([80, 40, 100]);
+      playSonarPing(130, 0.25);
+      showToast("🦈 MEGALODON MELINTAS! Belum mengunci jawaban (-10% O₂)");
+    } else {
+      showToast("🦈 Megalodon melintas! Kapalmu sudah senyap & aman.");
+    }
+  });
 }
 
 // Submit Jawaban (Mendukung Online Server & Offline Mandiri HP)
@@ -1975,9 +2049,6 @@ function lockAnswerUI(canonicalName, tierHint, rerollsLeft) {
   feedback.textContent = "";
   feedback.className = "sonar-feedback";
 
-  const phasePlaying = document.getElementById("phase-playing");
-  if (phasePlaying) phasePlaying.classList.remove("keyboard-typing");
-
   document.getElementById("form-answer").classList.add("hidden");
   const lockedPanel = document.getElementById("locked-answer-panel");
   lockedPanel.classList.remove("hidden");
@@ -1991,23 +2062,6 @@ function lockAnswerUI(canonicalName, tierHint, rerollsLeft) {
   btnReroll.disabled = rerollsLeft <= 0;
   if (rerollsLeft <= 0) btnReroll.classList.add("hidden");
   else btnReroll.classList.remove("hidden");
-}
-
-// Soal ikut turun simpel saat mengetik di mobile / fokus input
-const inputAnswerEl = document.getElementById("input-answer");
-if (inputAnswerEl) {
-  let blurTimer = null;
-  inputAnswerEl.addEventListener("focus", () => {
-    if (blurTimer) clearTimeout(blurTimer);
-    const phasePlaying = document.getElementById("phase-playing");
-    if (phasePlaying) phasePlaying.classList.add("keyboard-typing");
-  });
-  inputAnswerEl.addEventListener("blur", () => {
-    blurTimer = setTimeout(() => {
-      const phasePlaying = document.getElementById("phase-playing");
-      if (phasePlaying) phasePlaying.classList.remove("keyboard-typing");
-    }, 120);
-  });
 }
 
 // Fitur Sonar Cadangan (1x Ganti Jawaban)
@@ -2348,6 +2402,11 @@ function ensurePersistentOceanRunning() {
 
     const oCtx = pCanvas.getContext("2d");
     oCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (oceanWorld.shakeUntil && oceanWorld.shakeUntil > now) {
+      const rem = (oceanWorld.shakeUntil - now) / 480;
+      const amp = 9 * rem;
+      oCtx.translate(Math.sin(now * 0.09) * amp, Math.cos(now * 0.11) * amp * 0.75);
+    }
 
     // Hitung cameraDepth saat ini (baik saat mengambang maupun saat descend!)
     let speedM = 0;
@@ -2551,44 +2610,238 @@ function ensurePersistentOceanRunning() {
       oCtx.restore();
     }
 
-    // 4B. Pengumuman Jawaban Terlangka di Belakang Kapal Selam (ikut tenggelam & menyatu dengan laut)
+    // 4A. Pertanyaan Sonar Menyatu di Dalam Laut (Holo-Buoy / Kapsul Radar di belakang kapal selam)
+    const phasePlayingEl = document.getElementById("phase-playing");
+    const isPlayingVisible = phasePlayingEl && !phasePlayingEl.classList.contains("hidden");
+    if (isPlayingVisible && !oceanWorld.diveActive && !oceanWorld.rarestBanner && oceanWorld.currentPrompt) {
+      const pr = oceanWorld.currentPrompt;
+      const swayY = Math.sin(now * 0.0014) * 3;
+      const fontSize = W < 480 ? 17 : 21;
+      const maxPromptW = Math.min(W - 76, 480);
+
+      oCtx.save();
+      oCtx.font = `800 ${fontSize}px Outfit, sans-serif`;
+      const words = pr.title.split(/\s+/);
+      let line = "";
+      const lines = [];
+      for (let wi = 0; wi < words.length; wi++) {
+        const test = line ? line + " " + words[wi] : words[wi];
+        if (oCtx.measureText(test).width > maxPromptW && line) {
+          lines.push(line);
+          line = words[wi];
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      const visibleLines = lines.slice(0, 3);
+
+      const lineH = fontSize + 6;
+      const textBlockH = visibleLines.length * lineH;
+      const maxTextW = Math.max(
+        180,
+        ...visibleLines.map((ln) => oCtx.measureText(ln).width)
+      );
+      const boxW = Math.min(W - 32, maxTextW + 72);
+      const boxH = textBlockH + (pr.theme ? 48 : 34);
+      const centerX = W * 0.5;
+      const vv = window.visualViewport;
+      const visibleTopInCanvas = vv ? Math.max(0, vv.offsetTop - rect.top) : Math.max(0, -rect.top);
+      const visibleBottomInCanvas = vv
+        ? Math.min(H, vv.offsetTop + vv.height - rect.top)
+        : Math.min(H, window.innerHeight - rect.top);
+      const visibleH = Math.max(120, visibleBottomInCanvas - visibleTopInCanvas);
+      const isKeyboardCompact =
+        visibleH < H - 80 ||
+        (document.activeElement && document.activeElement.id === "input-answer" && W <= 768);
+      const defaultCenterY = Math.max(88 + boxH * 0.5, Math.min(H * 0.28, anchorY - 92));
+      const compactCenterY =
+        visibleTopInCanvas +
+        Math.min(visibleH - boxH * 0.5 - 78, Math.max(boxH * 0.5 + 14, visibleH * 0.28));
+      const targetPromptY = isKeyboardCompact
+        ? Math.max(visibleTopInCanvas + boxH * 0.5 + 12, compactCenterY)
+        : defaultCenterY;
+      oceanWorld.promptY =
+        oceanWorld.promptY == null ? targetPromptY : lerpNum(oceanWorld.promptY, targetPromptY, 0.2);
+      const centerY = oceanWorld.promptY + swayY;
+      const rx = boxW * 0.5;
+      const ry = boxH * 0.5;
+
+      // Pembungkus Monolith Karang Bioluminesensi (lebih cerah + tekstur garis-garis halus)
+      const bioGlow = 0.55 + 0.35 * Math.sin(now * 0.0025);
+      const monoGrad = oCtx.createLinearGradient(centerX, centerY - ry, centerX, centerY + ry);
+      monoGrad.addColorStop(0, "rgba(14, 48, 86, 0.80)");
+      monoGrad.addColorStop(1, "rgba(7, 26, 52, 0.86)");
+      oCtx.fillStyle = monoGrad;
+      oCtx.strokeStyle = `rgba(94, 234, 212, ${0.48 * bioGlow + 0.25})`;
+      oCtx.lineWidth = 2.2;
+      oCtx.beginPath();
+      oCtx.moveTo(centerX - rx + 14, centerY - ry + 4);
+      oCtx.lineTo(centerX - rx * 0.35, centerY - ry - 3);
+      oCtx.lineTo(centerX + rx * 0.3, centerY - ry - 2);
+      oCtx.lineTo(centerX + rx - 12, centerY - ry + 5);
+      oCtx.lineTo(centerX + rx + 5, centerY - ry * 0.25);
+      oCtx.lineTo(centerX + rx + 2, centerY + ry * 0.45);
+      oCtx.lineTo(centerX + rx - 16, centerY + ry + 3);
+      oCtx.lineTo(centerX + rx * 0.25, centerY + ry + 5);
+      oCtx.lineTo(centerX - rx * 0.3, centerY + ry + 2);
+      oCtx.lineTo(centerX - rx + 12, centerY + ry + 4);
+      oCtx.lineTo(centerX - rx - 4, centerY + ry * 0.35);
+      oCtx.lineTo(centerX - rx - 2, centerY - ry * 0.35);
+      oCtx.closePath();
+      oCtx.fill();
+      oCtx.stroke();
+
+      // Tekstur garis-garis halus (scanline / lapisan batu karang) di dalam monolith
+      oCtx.save();
+      oCtx.clip();
+      oCtx.strokeStyle = "rgba(125, 211, 252, 0.09)";
+      oCtx.lineWidth = 1;
+      for (let sy = centerY - ry - 6; sy <= centerY + ry + 6; sy += 5) {
+        oCtx.beginPath();
+        oCtx.moveTo(centerX - rx - 8, sy);
+        oCtx.lineTo(centerX + rx + 8, sy + 3);
+        oCtx.stroke();
+      }
+      oCtx.restore();
+
+      // Urat karang & polip bioluminesensi di tepi monolith
+      oCtx.strokeStyle = `rgba(56, 189, 248, ${0.42 * bioGlow + 0.12})`;
+      oCtx.lineWidth = 1.4;
+      oCtx.beginPath();
+      oCtx.moveTo(centerX - rx + 10, centerY + ry * 0.3);
+      oCtx.quadraticCurveTo(centerX - rx + 24, centerY, centerX - rx + 16, centerY - ry * 0.45);
+      oCtx.moveTo(centerX + rx - 10, centerY - ry * 0.3);
+      oCtx.quadraticCurveTo(centerX + rx - 24, centerY + 4, centerX + rx - 14, centerY + ry * 0.45);
+      oCtx.stroke();
+
+      const polypPts = [
+        [centerX - rx + 6, centerY - ry * 0.65],
+        [centerX + rx - 8, centerY - ry * 0.6],
+        [centerX - rx + 14, centerY + ry * 0.65],
+        [centerX + rx - 12, centerY + ry * 0.6]
+      ];
+      polypPts.forEach(([px, py], pi) => {
+        const pAlpha = 0.35 + 0.55 * Math.sin(now * 0.0035 + pi * 1.4);
+        oCtx.fillStyle = pi % 2 === 0 ? `rgba(52, 211, 153, ${pAlpha})` : `rgba(34, 211, 238, ${pAlpha})`;
+        oCtx.beginPath();
+        oCtx.arc(px, py, 2.4, 0, Math.PI * 2);
+        oCtx.fill();
+      });
+
+      // Teks Tema & Soal
+      oCtx.textAlign = "center";
+      oCtx.textBaseline = "middle";
+      let startTextY = centerY - (textBlockH - lineH) * 0.5;
+      if (pr.theme) {
+        oCtx.font = "700 10px Outfit, sans-serif";
+        oCtx.fillStyle = "rgba(94, 234, 212, 0.84)";
+        oCtx.fillText(`🪸 ${pr.theme}`, centerX, centerY - ry + 16);
+        startTextY += 8;
+      }
+
+      oCtx.font = `800 ${fontSize}px Outfit, sans-serif`;
+      oCtx.fillStyle = "rgba(240, 249, 255, 0.97)";
+      oCtx.shadowColor = "rgba(56, 189, 248, 0.52)";
+      oCtx.shadowBlur = 12;
+      visibleLines.forEach((ln, idx) => {
+        oCtx.fillText(ln, centerX, startTextY + idx * lineH);
+      });
+      oCtx.restore();
+    }
+
+    // 4B. Pengumuman Jawaban Terlangka (Relik Sonar Bioluminesensi di Zona Atas, aman dari kapal & penggaris)
     if (oceanWorld.rarestBanner && !oceanWorld.diveActive) {
       const rb = oceanWorld.rarestBanner;
       const elapsedSec = Math.max(0, (now - rb.startTime) / 1000);
-      const sinkY = Math.min(26, elapsedSec * 4.5);
-      const fadeAlpha = Math.min(0.68, elapsedSec * 1.1);
+      const swayY = Math.sin(now * 0.0015) * 3;
+      const fadeAlpha = Math.min(0.95, elapsedSec * 1.4);
+      const maxW = Math.min(W - 104, 430);
+
       oCtx.save();
       oCtx.globalAlpha = fadeAlpha;
       oCtx.textAlign = "center";
       oCtx.textBaseline = "middle";
-      const textY = anchorY - 72 + sinkY;
-      oCtx.font = "800 15px Outfit, sans-serif";
-      oCtx.fillStyle = "rgba(186, 230, 253, 0.88)";
-      oCtx.fillText(rb.title, W * 0.5, textY);
 
+      // Bungkus kata fakta terlebih dahulu agar tinggi panel presisi
+      const factLines = [];
       if (rb.fact) {
-        oCtx.font = "500 12px 'Plus Jakarta Sans', sans-serif";
-        oCtx.fillStyle = "rgba(148, 163, 184, 0.85)";
+        oCtx.font = "500 11.5px 'Plus Jakarta Sans', sans-serif";
         const words = rb.fact.split(/\s+/);
-        const maxW = Math.min(W - 60, 420);
         let line = "";
-        let lineY = textY + 20;
-        let lineCount = 0;
         for (let wi = 0; wi < words.length; wi++) {
           const testLine = line ? line + " " + words[wi] : words[wi];
-          if (oCtx.measureText(testLine).width > maxW && line) {
-            oCtx.fillText(line, W * 0.5, lineY);
+          if (oCtx.measureText(testLine).width > maxW - 36 && line) {
+            factLines.push(line);
             line = words[wi];
-            lineY += 16;
-            lineCount++;
-            if (lineCount >= 2) break;
+            if (factLines.length >= 2) break;
           } else {
             line = testLine;
           }
         }
-        if (line && lineCount < 2) {
-          oCtx.fillText(line, W * 0.5, lineY);
-        }
+        if (line && factLines.length < 2) factLines.push(line);
+      }
+
+      const titleFont = W < 480 ? 13.5 : 15;
+      oCtx.font = `800 ${titleFont}px Outfit, sans-serif`;
+      const titleW = Math.min(maxW - 32, oCtx.measureText(rb.title).width);
+      const boxW = Math.max(220, Math.min(maxW, Math.max(titleW + 44, maxW * 0.88)));
+      const boxH = 54 + factLines.length * 16;
+      const centerX = Math.min(W * 0.5, (W - 64) * 0.5 + 8);
+      const centerY = Math.max(76 + boxH * 0.5, Math.min(H * 0.21, anchorY - 115)) + swayY;
+      const rx = boxW * 0.5;
+      const ry = boxH * 0.5;
+
+      // Cincin sonar mengembang saat pertama muncul
+      if (elapsedSec < 1.8) {
+        const ringR = 24 + elapsedSec * 70;
+        oCtx.strokeStyle = `rgba(56, 189, 248, ${Math.max(0, 0.38 - elapsedSec * 0.2)})`;
+        oCtx.lineWidth = 1.5;
+        oCtx.beginPath();
+        oCtx.ellipse(centerX, centerY, rx + ringR * 0.45, ry + ringR * 0.25, 0, 0, Math.PI * 2);
+        oCtx.stroke();
+      }
+
+      // Latar Relik Sonar Transparan (menyatu dengan air, tidak menutupi kapal)
+      const relicGrad = oCtx.createLinearGradient(centerX, centerY - ry, centerX, centerY + ry);
+      relicGrad.addColorStop(0, "rgba(12, 42, 74, 0.62)");
+      relicGrad.addColorStop(1, "rgba(5, 20, 42, 0.72)");
+      oCtx.fillStyle = relicGrad;
+      oCtx.strokeStyle = "rgba(56, 189, 248, 0.42)";
+      oCtx.lineWidth = 1.5;
+      oCtx.beginPath();
+      oCtx.roundRect(centerX - rx, centerY - ry, boxW, boxH, 14);
+      oCtx.fill();
+      oCtx.stroke();
+
+      // Garis aksen atas menyala
+      oCtx.strokeStyle = "rgba(94, 234, 212, 0.75)";
+      oCtx.lineWidth = 2;
+      oCtx.beginPath();
+      oCtx.moveTo(centerX - 36, centerY - ry);
+      oCtx.lineTo(centerX + 36, centerY - ry);
+      oCtx.stroke();
+
+      // Badge kecil di atas
+      oCtx.font = "800 9.5px Outfit, sans-serif";
+      oCtx.fillStyle = "rgba(94, 234, 212, 0.9)";
+      oCtx.fillText("💎 TEMUAN TERLANGKA", centerX, centerY - ry + 13);
+
+      // Judul temuan (dipotong rapi jika terlalu panjang)
+      oCtx.font = `800 ${titleFont}px Outfit, sans-serif`;
+      oCtx.fillStyle = "rgba(240, 249, 255, 0.96)";
+      oCtx.shadowColor = "rgba(34, 211, 238, 0.4)";
+      oCtx.shadowBlur = 10;
+      oCtx.fillText(rb.title, centerX, centerY - ry + 32, boxW - 28);
+      oCtx.shadowBlur = 0;
+
+      // Fakta singkat di bawahnya
+      if (factLines.length > 0) {
+        oCtx.font = "500 11.5px 'Plus Jakarta Sans', sans-serif";
+        oCtx.fillStyle = "rgba(186, 230, 253, 0.85)";
+        factLines.forEach((ln, idx) => {
+          oCtx.fillText(ln, centerX, centerY - ry + 52 + idx * 16);
+        });
       }
       oCtx.restore();
     }
@@ -2672,7 +2925,20 @@ function ensurePersistentOceanRunning() {
     oCtx.fillText("YOU", rulerX - 17, anchorY + 3);
     oCtx.restore();
 
-    // 8. Render Kapal Selam PALUNG.IO Pemain (Saat Menyelam, Pasca-Selam, MAUPUN Saat Mengambang Membaca Soal!)
+    // 8. Render Kapal Selam PALUNG.IO Pemain (Transisi Meluncur Halus di Air, Tidak Teleport!)
+    if (!oceanWorld.subPos) oceanWorld.subPos = {};
+    const smoothSubPos = (id, targetX, targetY) => {
+      const prev = oceanWorld.subPos[id];
+      if (!prev) {
+        oceanWorld.subPos[id] = { x: targetX, y: targetY };
+        return oceanWorld.subPos[id];
+      }
+      prev.x = lerpNum(prev.x, targetX, 0.085);
+      prev.y = lerpNum(prev.y, targetY, 0.14);
+      return prev;
+    };
+
+    const otherPlayersTrack = [];
     if (oceanWorld.diveActive || oceanWorld.showRevealTags) {
       const pProg = oceanWorld.diveActive ? diveProgress : 1;
       const isDivingNow = oceanWorld.diveActive;
@@ -2680,10 +2946,22 @@ function ensurePersistentOceanRunning() {
       oceanWorld.diveResults.forEach((r, idx) => {
         const startD = Math.max(0, (r.totalDepth || 0) - (r.depthGained || 0));
         const curD = startD + (r.depthGained || 0) * pProg;
-        const laneX = count === 1 ? W * 0.5 : W * (0.18 + (idx / (count - 1)) * 0.62);
+        const targetX = count === 1 ? W * 0.5 : W * (0.18 + (idx / (count - 1)) * 0.62);
         const bob = isDivingNow ? 0 : Math.sin(now * 0.0025 + idx) * 4;
-        const dy = anchorY + (curD - camD) * pxPerMeter + bob;
+        const targetY = anchorY + (curD - camD) * pxPerMeter + bob;
+        const pos = smoothSubPos(r.playerId, targetX, targetY);
+        const laneX = pos.x;
+        const dy = pos.y;
         const isMe = r.playerId === oceanWorld.diveMyId;
+        if (!isMe) {
+          otherPlayersTrack.push({
+            name: r.playerName,
+            depth: curD,
+            color: r.playerColor || "#38bdf8",
+            y: dy,
+            laneX
+          });
+        }
         if (dy > 48 && dy < H - 35) {
           const wordTag = r.answered
             ? `"${r.canonicalName.toUpperCase()}" ${r.isCollision ? "💥" : `+${r.depthGained}m`}`
@@ -2713,12 +2991,24 @@ function ensurePersistentOceanRunning() {
       players.forEach((p, idx) => {
         const isMe = p.id === myId;
         const pDepth = p.totalDepth || 0;
-        const laneX = isMe
+        const targetX = isMe
           ? W * 0.24
           : W * (0.45 + ((idx % Math.max(1, count - 1)) / Math.max(1, count)) * 0.38);
-        const py = isMe
+        const targetY = isMe
           ? anchorY + Math.sin(now * 0.0025) * 5
           : anchorY + (pDepth - camD) * pxPerMeter + Math.sin(now * 0.002 + idx) * 4;
+        const pos = smoothSubPos(p.id, targetX, targetY);
+        const laneX = pos.x;
+        const py = pos.y;
+        if (!isMe) {
+          otherPlayersTrack.push({
+            name: p.name,
+            depth: pDepth,
+            color: p.color || "#38bdf8",
+            y: py,
+            laneX
+          });
+        }
         if (py > 60 && py < H - 65) {
           oCtx.save();
           if (!isMe) oCtx.globalAlpha = 0.65;
@@ -2741,6 +3031,184 @@ function ensurePersistentOceanRunning() {
           oCtx.restore();
         }
       });
+    }
+
+    // 8B. Animasi Teror Megalodon (Berpatroli -> Melesat Menyenggol Kapal Korban -> Pergi Menghilang!)
+    if (currentRoom && currentRoom.settings && currentRoom.settings.gameMode === "puffer") {
+      const drawMegalodon = (mx, my, scale, alpha, tailSpeed = 0.01) => {
+        oCtx.save();
+        oCtx.translate(mx, my);
+        oCtx.scale(scale, scale);
+        oCtx.globalAlpha = alpha;
+
+        const tailWag = Math.sin(now * tailSpeed) * 10;
+
+        // Tubuh Megalodon Raksasa (siluet hiu purba gelap biru-abu)
+        const sharkGrad = oCtx.createLinearGradient(-70, -24, 75, 24);
+        sharkGrad.addColorStop(0, "#1e293b");
+        sharkGrad.addColorStop(0.55, "#334155");
+        sharkGrad.addColorStop(1, "#0f172a");
+        oCtx.fillStyle = sharkGrad;
+
+        oCtx.beginPath();
+        oCtx.moveTo(78, 2); // Moncong depan
+        oCtx.quadraticCurveTo(45, -24, -10, -22); // Punggung atas
+        oCtx.lineTo(-24, -46); // Sirip punggung tinggi
+        oCtx.quadraticCurveTo(-22, -22, -46, -12);
+        oCtx.lineTo(-82, -28 + tailWag); // Ekor atas
+        oCtx.lineTo(-66, tailWag * 0.5);
+        oCtx.lineTo(-80, 22 + tailWag); // Ekor bawah
+        oCtx.lineTo(-44, 12);
+        oCtx.quadraticCurveTo(10, 24, 62, 12); // Perut
+        oCtx.quadraticCurveTo(74, 8, 78, 2);
+        oCtx.closePath();
+        oCtx.fill();
+
+        // Garis rahang & gigi putih tajam
+        oCtx.fillStyle = "#e2e8f0";
+        oCtx.beginPath();
+        oCtx.moveTo(48, 8);
+        oCtx.lineTo(52, 13);
+        oCtx.lineTo(56, 8);
+        oCtx.lineTo(60, 13);
+        oCtx.lineTo(64, 7);
+        oCtx.lineTo(68, 12);
+        oCtx.lineTo(72, 6);
+        oCtx.closePath();
+        oCtx.fill();
+
+        // Celah insang
+        oCtx.strokeStyle = "rgba(15, 23, 42, 0.85)";
+        oCtx.lineWidth = 2;
+        for (let gi = 0; gi < 3; gi++) {
+          oCtx.beginPath();
+          oCtx.moveTo(22 - gi * 6, -6);
+          oCtx.lineTo(20 - gi * 6, 8);
+          oCtx.stroke();
+        }
+
+        // Mata merah menyala mengintai
+        oCtx.fillStyle = "#fb7185";
+        oCtx.shadowColor = "rgba(244, 63, 94, 0.9)";
+        oCtx.shadowBlur = 8;
+        oCtx.beginPath();
+        oCtx.arc(54, -4, 2.8, 0, Math.PI * 2);
+        oCtx.fill();
+        oCtx.restore();
+      };
+
+      if (!oceanWorld.diveActive && !oceanWorld.rarestBanner) {
+        // Patroli Megalodon di kejauhan selama ronde berlangsung
+        const patrolX = ((now * 0.055) % (W + 320)) - 160;
+        const patrolY = anchorY - 46 + Math.sin(now * 0.002) * 10;
+        drawMegalodon(patrolX, patrolY, 0.72, 0.36, 0.008);
+
+        // Serangan cepat tengah ronde (Panic Bite) melintas di depan kapal
+        if (oceanWorld.megalodonPanicStart) {
+          const pElapsed = (now - oceanWorld.megalodonPanicStart) / 1000;
+          if (pElapsed >= 0 && pElapsed <= 1.25) {
+            const pProg = pElapsed / 1.25;
+            const px = lerpNum(-180, W + 200, pProg);
+            drawMegalodon(px, anchorY + 4, 1.08, 0.94, 0.025);
+          } else {
+            oceanWorld.megalodonPanicStart = null;
+          }
+        }
+      } else if (oceanWorld.pufferVictimId && oceanWorld.megalodonStrikeStart) {
+        const vic =
+          oceanWorld.diveResults.find((r) => r.playerId === oceanWorld.pufferVictimId) || null;
+        if (vic) {
+          const vIdx = oceanWorld.diveResults.indexOf(vic);
+          const count = oceanWorld.diveResults.length || 1;
+          const vx = count === 1 ? W * 0.5 : W * (0.18 + (vIdx / (count - 1)) * 0.62);
+          const vy = anchorY + (vic.totalDepth - camD) * pxPerMeter;
+          const elapsed = (now - oceanWorld.megalodonStrikeStart) / 1000;
+
+          // Melesat dari kiri (-160) -> menyenggol korban (~0.85s) -> pergi menghilang ke kanan (1.9s)
+          if (elapsed >= 0 && elapsed <= 2.1 && vy > 48 && vy < H - 35) {
+            const prog = elapsed / 1.9;
+            const sharkX = lerpNum(-160, W + 200, prog);
+            const sharkY = vy + Math.sin(prog * Math.PI) * -6;
+            const alpha = prog > 0.75 ? Math.max(0, (1 - prog) * 4) : 0.92;
+            drawMegalodon(sharkX, sharkY, 1.05, alpha, 0.022);
+
+            // Efek benturan air saat menyenggol kapal korban
+            const distToVictim = Math.abs(sharkX - vx);
+            if (distToVictim < 90) {
+              if (!oceanWorld.megalodonHitTriggered) {
+                oceanWorld.megalodonHitTriggered = true;
+                oceanWorld.shakeUntil = now + 480;
+                triggerHaptic([90, 40, 120, 40, 70]);
+                playSonarPing(130, 0.25);
+              }
+              const impactAlpha = 1 - distToVictim / 90;
+              oCtx.save();
+              oCtx.strokeStyle = `rgba(251, 113, 133, ${impactAlpha * 0.8})`;
+              oCtx.lineWidth = 3;
+              oCtx.beginPath();
+              oCtx.arc(vx, vy, 28 + (1 - impactAlpha) * 28, 0, Math.PI * 2);
+              oCtx.stroke();
+              oCtx.font = "22px sans-serif";
+              oCtx.textAlign = "center";
+              oCtx.textBaseline = "middle";
+              oCtx.fillText("💥", vx, vy - 26);
+              oCtx.restore();
+            }
+          }
+        }
+      }
+    }
+
+    // 9. Kombinasi Indikator Kedalaman Pemain Lain: Titik di Penggaris Kanan + Pill Panah di Tepi Atas/Bawah
+    if (otherPlayersTrack.length > 0) {
+      oCtx.save();
+      const topOff = [];
+      const botOff = [];
+      otherPlayersTrack.forEach((op) => {
+        // 9A. Titik warna pada penggaris kanan
+        const pipY = Math.max(66, Math.min(H - 26, op.y));
+        oCtx.fillStyle = op.color;
+        oCtx.strokeStyle = "#040d1a";
+        oCtx.lineWidth = 1.5;
+        oCtx.beginPath();
+        oCtx.arc(rulerX, pipY, 3.8, 0, Math.PI * 2);
+        oCtx.fill();
+        oCtx.stroke();
+
+        if (op.y <= 56) topOff.push(op);
+        else if (op.y >= H - 56) botOff.push(op);
+      });
+
+      // 9B. Pill panah di tepi atas/bawah layar jika pemain keluar dari kamera
+      const drawEdgePills = (list, isTop) => {
+        if (list.length === 0) return;
+        const shown = list.slice(0, 3);
+        const pillY = isTop ? 68 : H - (oceanWorld.diveActive || oceanWorld.showRevealTags ? 42 : 96);
+        const slotW = Math.min(130, (W - 40) / shown.length);
+        const startX = W * 0.5 - ((shown.length - 1) * slotW) * 0.5;
+
+        shown.forEach((op, idx) => {
+          const px = Math.max(66, Math.min(W - 66, startX + idx * slotW));
+          const label = `${isTop ? "▲" : "▼"} ${op.name.slice(0, 7)} ${Math.round(op.depth)}m`;
+          oCtx.font = "700 10.5px Outfit, sans-serif";
+          const tw = Math.min(122, oCtx.measureText(label).width + 16);
+          oCtx.fillStyle = "rgba(4, 15, 34, 0.84)";
+          oCtx.strokeStyle = op.color;
+          oCtx.lineWidth = 1.3;
+          oCtx.beginPath();
+          oCtx.roundRect(px - tw * 0.5, pillY - 11, tw, 22, 999);
+          oCtx.fill();
+          oCtx.stroke();
+
+          oCtx.fillStyle = "#e2e8f0";
+          oCtx.textAlign = "center";
+          oCtx.textBaseline = "middle";
+          oCtx.fillText(label, px, pillY, tw - 10);
+        });
+      };
+      drawEdgePills(topOff, true);
+      drawEdgePills(botOff, false);
+      oCtx.restore();
     }
   }
 
@@ -2799,14 +3267,14 @@ function playGroupDescendAnimation(payload, onDone) {
   };
 }
 
-// Kontrol Tab Bar Bawah Floating (Fakta | Legenda | Detail Kru)
+// Kontrol Tab Bar Bawah Floating (Legenda | Detail Kru)
 document.querySelectorAll(".oib-tab[data-oib]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    const mode = btn.dataset.oib;
-    document.querySelectorAll(".oib-tab[data-oib]").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("oib-panel-fact").classList.toggle("hidden", mode !== "fact");
-    document.getElementById("oib-panel-legend").classList.toggle("hidden", mode !== "legend");
+    const legendPanel = document.getElementById("oib-panel-legend");
+    if (legendPanel) {
+      const isHidden = legendPanel.classList.toggle("hidden");
+      btn.classList.toggle("active", !isHidden);
+    }
   });
 });
 
@@ -2831,6 +3299,14 @@ if (btnCloseRevealDetail && revealDetailDrawer && btnToggleRevealDetail) {
 // ============================================================================
 function handleRoundRevealUI(payload) {
   setBgmMood("calm");
+  if (typeof oceanWorld !== "undefined") {
+    oceanWorld.pufferVictimId = payload.pufferEvent ? payload.pufferEvent.victimId : null;
+    oceanWorld.megalodonStrikeStart = payload.pufferEvent ? performance.now() : null;
+    oceanWorld.megalodonHitTriggered = false;
+  }
+  if (payload.pufferEvent) {
+    showToast(`🦈 MEGALODON MENYENGGOL kapal ${payload.pufferEvent.victimName}! (-150m & -18% O₂)`);
+  }
   const revealReceivedAt = Date.now();
   const totalWaitMs = payload.nextRoundInMs || 13500;
 

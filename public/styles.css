@@ -3355,37 +3355,9 @@ body.in-gameplay .phone-frame-wrapper.simulated-phone .ocean-stage-container {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.35), 0 0 24px rgba(34, 211, 238, 0.18);
 }
 
-/* 1. Soal ikut turun simpel saat mengetik di mobile / input fokus */
+/* Pertanyaan menyatu di dalam laut (canvas belakang kapal), tanpa kartu overlay yang menutupi kapal */
 .krillion-prompt-card {
-  transition: transform 0.25s ease, margin 0.25s ease, padding 0.25s ease, background 0.25s ease;
-}
-#phase-playing.keyboard-typing {
-  justify-content: flex-end;
-}
-#phase-playing.keyboard-typing .krillion-prompt-card {
-  margin-top: auto;
-  margin-bottom: 0.45rem;
-  padding: 0.55rem 0.9rem;
-  background: rgba(4, 15, 32, 0.88);
-  border-color: rgba(56, 189, 248, 0.32);
-  transform: translateY(0);
-  animation: slidePromptDown 0.22s ease-out;
-}
-#phase-playing.keyboard-typing .kpc-meta,
-#phase-playing.keyboard-typing #game-category-hint,
-#phase-playing.keyboard-typing .kpc-subline,
-#phase-playing.keyboard-typing #oxygen-hud,
-#phase-playing.keyboard-typing .ocean-react-strip {
   display: none !important;
-}
-#phase-playing.keyboard-typing #game-category-title {
-  font-size: 1.02rem;
-  margin: 0;
-  line-height: 1.3;
-}
-@keyframes slidePromptDown {
-  from { opacity: 0.35; transform: translateY(-18px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 2. Status Jawaban Terkunci: Ikon Centang Mengambang lalu Minggir */

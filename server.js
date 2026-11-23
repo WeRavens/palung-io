@@ -377,7 +377,7 @@ function createRoom({
       roundDuration: isDaily ? 25 : Math.min(60, Math.max(10, Math.round(Number(settings.roundDuration)) || 25)),
       theme: isDaily ? "all" : typeof settings.theme === "string" ? settings.theme.slice(0, 30) : "all",
       collisionRule: isDaily ? false : settings.collisionRule !== false,
-      gameMode: isDaily ? "daily" : ["competitive", "coop", "tide"].includes(settings.gameMode) ? settings.gameMode : "competitive"
+      gameMode: isDaily ? "daily" : ["competitive", "coop", "tide", "puffer"].includes(settings.gameMode) ? settings.gameMode : "competitive"
     },
     players: [],
     currentRound: 0,
@@ -494,6 +494,10 @@ function clearRoomTimers(room) {
   if (room.revealTimeout) {
     clearTimeout(room.revealTimeout);
     room.revealTimeout = null;
+  }
+  if (room.megalodonMidTimer) {
+    clearTimeout(room.megalodonMidTimer);
+    room.megalodonMidTimer = null;
   }
   if (room.botTimeouts && room.botTimeouts.length) {
     room.botTimeouts.forEach((t) => clearTimeout(t));
@@ -630,6 +634,24 @@ function startNextRound(room) {
       totalPossibleAnswers: currentCat.answers.length
     }
   });
+
+  // Serangan Tengah Ronde (Panic Bite) untuk mode Teror Megalodon!
+  if (room.settings.gameMode === "puffer") {
+    room.megalodonMidTimer = setTimeout(() => {
+      if (room.state !== "PLAYING") return;
+      const bittenIds = [];
+      room.players.forEach((p) => {
+        if (!p.isBot && !room.roundSubmissions[p.id]) {
+          p.oxygen = Math.max(0, p.oxygen - 10);
+          bittenIds.push(p.id);
+        }
+      });
+      if (bittenIds.length > 0) {
+        broadcastRoomUpdate(room);
+      }
+      io.to(room.code).emit("megalodon:panic", { bittenIds });
+    }, Math.floor(durationMs * 0.5));
+  }
 
   // Jadwalkan jawaban AI Bot
   room.players
@@ -854,6 +876,37 @@ function endRoundAndReveal(room) {
     });
   });
 
+  // Mode Teror Megalodon (Radar Kebisingan): hanya jawaban pasaran (<=45), tabrakan, atau telat yang memancing Megalodon!
+  // Jawaban langka (>45 tanpa tabrakan) = senyap/stealth sehingga aman dari sergapan!
+  let pufferEvent = null;
+  if (room.settings.gameMode === "puffer" && results.length >= 2) {
+    const noisyCandidates = results
+      .filter((r) => !r.answered || r.isCollision || r.baseScore <= 45)
+      .sort((a, b) => {
+        if (a.answered !== b.answered) return a.answered ? 1 : -1;
+        if (a.isCollision !== b.isCollision) return a.isCollision ? -1 : 1;
+        return a.baseScore - b.baseScore;
+      });
+    const victimRes = noisyCandidates[0];
+    const victimPlayer = victimRes
+      ? room.players.find((p) => p.id === victimRes.playerId)
+      : null;
+    if (victimPlayer) {
+      victimPlayer.totalDepth = Math.max(0, victimPlayer.totalDepth - 150);
+      victimPlayer.oxygen = Math.max(0, victimPlayer.oxygen - 18);
+      victimRes.depthGained = Math.max(0, victimRes.depthGained - 150);
+      victimRes.totalDepth = victimPlayer.totalDepth;
+      victimRes.oxygenAfter = victimPlayer.oxygen;
+      victimRes.oxygenDelta -= 18;
+      victimRes.pufferExploded = true;
+      pufferEvent = {
+        victimId: victimPlayer.id,
+        victimName: victimPlayer.name,
+        victimAvatar: victimPlayer.avatar
+      };
+    }
+  }
+
   saveRuntimeData();
 
   // Urutkan hasil ronde dari kedalaman tertinggi di ronde ini
@@ -877,6 +930,7 @@ function endRoundAndReveal(room) {
     educationalNote: currentCat.educationalNote,
     results,
     rarestGuessed,
+    pufferEvent,
     legendaryExamples,
     nextRoundInMs: 13500
   };
@@ -1326,7 +1380,7 @@ io.on("connection", (socket) => {
     if (typeof newSettings.collisionRule === "boolean") {
       room.settings.collisionRule = newSettings.collisionRule;
     }
-    if (["competitive", "coop", "tide"].includes(newSettings.gameMode)) {
+    if (["competitive", "coop", "tide", "puffer"].includes(newSettings.gameMode)) {
       room.settings.gameMode = newSettings.gameMode;
     }
 
