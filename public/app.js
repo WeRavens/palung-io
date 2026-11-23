@@ -1914,6 +1914,7 @@ function handleRoundStartUI(payload) {
 if (socket) {
   socket.on("round:start", (payload) => {
     clearClientTimers();
+    oceanWorld.rarestBanner = null;
     handleRoundStartUI(payload);
   });
 }
@@ -1971,17 +1972,42 @@ function lockAnswerUI(canonicalName, tierHint, rerollsLeft) {
   playDiveLock();
   triggerSonarRipple("rgba(16, 185, 129, 0.55)");
   const feedback = document.getElementById("sonar-feedback");
-  feedback.textContent = `📡 Sinyal terdeteksi di ${tierHint}!`;
-  feedback.className = "sonar-feedback success";
+  feedback.textContent = "";
+  feedback.className = "sonar-feedback";
+
+  const phasePlaying = document.getElementById("phase-playing");
+  if (phasePlaying) phasePlaying.classList.remove("keyboard-typing");
 
   document.getElementById("form-answer").classList.add("hidden");
   const lockedPanel = document.getElementById("locked-answer-panel");
   lockedPanel.classList.remove("hidden");
+  lockedPanel.classList.add("simple-check-dock");
+  const badge = lockedPanel.querySelector(".locked-badge");
+  if (badge) badge.textContent = "✓";
   document.getElementById("locked-answer-name").textContent = canonicalName;
 
   const btnReroll = document.getElementById("btn-use-reroll");
   document.getElementById("reroll-count").textContent = rerollsLeft;
   btnReroll.disabled = rerollsLeft <= 0;
+  if (rerollsLeft <= 0) btnReroll.classList.add("hidden");
+  else btnReroll.classList.remove("hidden");
+}
+
+// Soal ikut turun simpel saat mengetik di mobile / fokus input
+const inputAnswerEl = document.getElementById("input-answer");
+if (inputAnswerEl) {
+  let blurTimer = null;
+  inputAnswerEl.addEventListener("focus", () => {
+    if (blurTimer) clearTimeout(blurTimer);
+    const phasePlaying = document.getElementById("phase-playing");
+    if (phasePlaying) phasePlaying.classList.add("keyboard-typing");
+  });
+  inputAnswerEl.addEventListener("blur", () => {
+    blurTimer = setTimeout(() => {
+      const phasePlaying = document.getElementById("phase-playing");
+      if (phasePlaying) phasePlaying.classList.remove("keyboard-typing");
+    }, 120);
+  });
 }
 
 // Fitur Sonar Cadangan (1x Ganti Jawaban)
@@ -2525,6 +2551,48 @@ function ensurePersistentOceanRunning() {
       oCtx.restore();
     }
 
+    // 4B. Pengumuman Jawaban Terlangka di Belakang Kapal Selam (ikut tenggelam & menyatu dengan laut)
+    if (oceanWorld.rarestBanner && !oceanWorld.diveActive) {
+      const rb = oceanWorld.rarestBanner;
+      const elapsedSec = Math.max(0, (now - rb.startTime) / 1000);
+      const sinkY = Math.min(26, elapsedSec * 4.5);
+      const fadeAlpha = Math.min(0.68, elapsedSec * 1.1);
+      oCtx.save();
+      oCtx.globalAlpha = fadeAlpha;
+      oCtx.textAlign = "center";
+      oCtx.textBaseline = "middle";
+      const textY = anchorY - 72 + sinkY;
+      oCtx.font = "800 15px Outfit, sans-serif";
+      oCtx.fillStyle = "rgba(186, 230, 253, 0.88)";
+      oCtx.fillText(rb.title, W * 0.5, textY);
+
+      if (rb.fact) {
+        oCtx.font = "500 12px 'Plus Jakarta Sans', sans-serif";
+        oCtx.fillStyle = "rgba(148, 163, 184, 0.85)";
+        const words = rb.fact.split(/\s+/);
+        const maxW = Math.min(W - 60, 420);
+        let line = "";
+        let lineY = textY + 20;
+        let lineCount = 0;
+        for (let wi = 0; wi < words.length; wi++) {
+          const testLine = line ? line + " " + words[wi] : words[wi];
+          if (oCtx.measureText(testLine).width > maxW && line) {
+            oCtx.fillText(line, W * 0.5, lineY);
+            line = words[wi];
+            lineY += 16;
+            lineCount++;
+            if (lineCount >= 2) break;
+          } else {
+            line = testLine;
+          }
+        }
+        if (line && lineCount < 2) {
+          oCtx.fillText(line, W * 0.5, lineY);
+        }
+      }
+      oCtx.restore();
+    }
+
     // 5. Biota Laut Melintas di Air
     oceanWorld.creatures.forEach((c) => {
       c.xNorm += c.speed;
@@ -2837,10 +2905,17 @@ function handleRoundRevealUI(payload) {
       .join("");
 
     if (payload.rarestGuessed) {
-      document.getElementById("spotlight-answer-title").textContent = `${payload.rarestGuessed.tier.emoji} ${payload.rarestGuessed.canonicalName} (Ditemukan oleh ${payload.rarestGuessed.finderName})`;
-      document.getElementById("spotlight-answer-fact").textContent =
-        payload.rarestGuessed.fact || payload.educationalNote;
+      const shortTitle = `${payload.rarestGuessed.canonicalName} ditemukan oleh ${payload.rarestGuessed.finderName}`;
+      const shortFact = payload.rarestGuessed.fact || payload.educationalNote || "";
+      oceanWorld.rarestBanner = {
+        title: shortTitle,
+        fact: shortFact,
+        startTime: performance.now()
+      };
+      document.getElementById("spotlight-answer-title").textContent = shortTitle;
+      document.getElementById("spotlight-answer-fact").textContent = shortFact;
     } else {
+      oceanWorld.rarestBanner = null;
       document.getElementById("spotlight-answer-title").textContent = "💡 Catatan Wawasan Kategori Ini";
       document.getElementById("spotlight-answer-fact").textContent = payload.educationalNote;
     }
