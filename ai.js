@@ -61,10 +61,10 @@ function extractJsonObject(text) {
   }
 }
 
-async function callCloudWorkerAI(messages, { temperature = 0.25, maxTokens = 800 } = {}) {
+async function callCloudWorkerAI(messages, { temperature = 0.25, maxTokens = 800, timeoutMs = 15000 } = {}) {
   const endpoint = getProxyUrl();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(endpoint, {
@@ -147,40 +147,48 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
 async function generateCategoryWithAI(topic, theme = "umum") {
   const systemPrompt =
     "Kamu adalah kurator konten kuis edukasi PALUNG.IO berbahasa Indonesia. " +
-    "Buatlah kategori trivia terbuka dengan 16 jawaban faktual yang tersebar merata di 4 tingkat kelangkaan: " +
-    "4 jawaban umum (skor 12-32), 4 cukup unik (36-62), 4 langka (66-86), 4 sangat langka (90-99). " +
-    'Judul "title" harus berupa pertanyaan singkat yang alami dimulai dengan "Sebutkan ..." (tanpa menyebut angka 16 atau kata "sesuai fakta"). ' +
+    "Buatlah kategori trivia terbuka dengan 12 jawaban faktual yang tersebar merata di 4 tingkat kelangkaan: " +
+    "3 jawaban umum (skor 12-32), 3 cukup unik (36-62), 3 langka (66-86), 3 sangat langka (90-99). " +
+    'Judul "title" harus berupa pertanyaan singkat yang alami dimulai dengan "Sebutkan ..." (tanpa menyebut angka 12 atau kata "sesuai fakta"). ' +
     "Balas HANYA JSON valid tanpa teks pembuka/penutup: " +
     '{"title": "Sebutkan ...", "hint": "Petunjuk singkat", "educationalNote": "1 kalimat pengantar edukasi", "answers": [{"name": "...", "score": 15, "fact": "1 kalimat fakta singkat"}]}.';
 
   const userPrompt = `Buat kategori kuis tentang topik: "${topic}" (tema: ${theme}). Pastikan seluruh fakta akurat, singkat, dan ramah semua umur.`;
 
-  const { model, content } = await callCloudWorkerAI(
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ],
-    { temperature: 0.3, maxTokens: 3200 }
-  );
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { model, content } = await callCloudWorkerAI(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        { temperature: 0.3, maxTokens: 2800, timeoutMs: 25000 }
+      );
 
-  const parsed = extractJsonObject(content);
-  if (!parsed || !Array.isArray(parsed.answers) || parsed.answers.length < 4) {
-    throw new Error("AI tidak mengembalikan format kategori yang valid.");
+      const parsed = extractJsonObject(content);
+      if (!parsed || !Array.isArray(parsed.answers) || parsed.answers.length < 4) {
+        throw new Error("AI tidak mengembalikan format kategori yang valid.");
+      }
+
+      return {
+        modelUsed: model,
+        title: String(parsed.title || `Sebutkan ${topic}`).trim(),
+        hint: String(parsed.hint || `Kategori seputar ${topic}`).trim(),
+        educationalNote: String(parsed.educationalNote || `Kategori edukasi tentang ${topic}.`).trim(),
+        answers: parsed.answers
+          .filter((a) => a && a.name)
+          .map((a) => ({
+            name: String(a.name).trim(),
+            score: Math.min(100, Math.max(10, Math.round(Number(a.score) || 50))),
+            fact: String(a.fact || "Fakta menarik!").trim()
+          }))
+      };
+    } catch (err) {
+      lastErr = err;
+    }
   }
-
-  return {
-    modelUsed: model,
-    title: String(parsed.title || `Sebutkan ${topic}`).trim(),
-    hint: String(parsed.hint || `Kategori seputar ${topic}`).trim(),
-    educationalNote: String(parsed.educationalNote || `Kategori edukasi tentang ${topic}.`).trim(),
-    answers: parsed.answers
-      .filter((a) => a && a.name)
-      .map((a) => ({
-        name: String(a.name).trim(),
-        score: Math.min(100, Math.max(10, Math.round(Number(a.score) || 50))),
-        fact: String(a.fact || "Fakta menarik!").trim()
-      }))
-  };
+  throw lastErr;
 }
 
 const RANDOM_TOPIC_SEEDS = [
