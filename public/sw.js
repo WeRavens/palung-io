@@ -1,4 +1,4 @@
-const CACHE_NAME = "palung-io-mobile-v7";
+const CACHE_NAME = "palung-io-mobile-v8";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",

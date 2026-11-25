@@ -351,7 +351,7 @@
           <!-- Daftar Penyelam + Chat Sementara di Room -->
           <div class="glass-card lobby-players-card">
             <div class="card-header-flex">
-              <h3>🤿 Kru Penyelam di Room (<span id="lobby-player-count">1</span>/8)</h3>
+              <h3>🤿 Kru Penyelam di Room (<span id="lobby-player-count">1</span>/<span id="lobby-max-players">8</span>)</h3>
               <button class="btn-add-bot" id="btn-add-bot">🤖 + Tambah AI Bot</button>
             </div>
 
@@ -415,6 +415,11 @@
                   <option value="35">35 Detik (Santai)</option>
                 </select>
               </div>
+            </div>
+
+            <div class="setting-item">
+              <label for="setting-maxplayers">Maksimal Pemain di Room (2–20 Kru)</label>
+              <input type="number" id="setting-maxplayers" min="2" max="20" step="1" value="8" />
             </div>
 
             <div class="setting-item checkbox-setting">

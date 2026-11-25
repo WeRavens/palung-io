@@ -375,6 +375,7 @@ function createRoom({
     settings: {
       roundsTotal: isDaily ? 7 : Math.min(15, Math.max(3, Math.round(Number(settings.roundsTotal)) || 7)),
       roundDuration: isDaily ? 25 : Math.min(60, Math.max(10, Math.round(Number(settings.roundDuration)) || 25)),
+      maxPlayers: isDaily ? 8 : Math.min(20, Math.max(2, Math.round(Number(settings.maxPlayers)) || 8)),
       theme: isDaily ? "all" : typeof settings.theme === "string" ? settings.theme.slice(0, 30) : "all",
       collisionRule: isDaily ? false : settings.collisionRule !== false,
       gameMode: isDaily ? "daily" : ["competitive", "coop", "tide", "puffer"].includes(settings.gameMode) ? settings.gameMode : "competitive"
@@ -437,6 +438,7 @@ function getPublicRoomsList() {
         code: r.code,
         hostName: r.players[0] ? r.players[0].name : "Kapten",
         playerCount: r.players.length,
+        maxPlayers: r.settings.maxPlayers || 8,
         theme: r.settings.theme,
         gameMode: r.settings.gameMode
       });
@@ -674,6 +676,7 @@ function startNextRound(room) {
   room.players.forEach((p) => {
     p.readyInRound = false;
     p.roundDepth = 0;
+    p.isCheckingAi = false;
   });
 
   const durationMs = (room.settings.roundDuration || 25) * 1000;
@@ -1062,6 +1065,7 @@ app.get("/api/info", (req, res) => {
         code: r.code,
         hostName: r.players[0] ? r.players[0].name : "Kapten",
         playerCount: r.players.length,
+        maxPlayers: r.settings.maxPlayers || 8,
         theme: r.settings.theme,
         gameMode: r.settings.gameMode
       });
@@ -1315,6 +1319,19 @@ io.on("connection", (socket) => {
       }
       return;
     }
+    if (room.state !== "LOBBY") {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Permainan di room ini sedang berlangsung!" });
+      }
+      return;
+    }
+    const maxP = room.settings.maxPlayers || 8;
+    if (room.players.length >= maxP) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: `Room sudah penuh (${maxP}/${maxP})!` });
+      }
+      return;
+    }
 
     leaveCurrentRoom();
     addPlayerToRoom(room, {
@@ -1341,7 +1358,7 @@ io.on("connection", (socket) => {
     // Cari room publik yang masih di LOBBY, jika tidak ada buat room baru dengan 3 AI Bot
     let targetRoom = null;
     for (const r of rooms.values()) {
-      if (r.isPublic && !r.isDaily && r.state === "LOBBY" && r.players.length < 8) {
+      if (r.isPublic && !r.isDaily && r.state === "LOBBY" && r.players.length < (r.settings.maxPlayers || 8)) {
         targetRoom = r;
         break;
       }
@@ -1436,6 +1453,17 @@ io.on("connection", (socket) => {
     if (Number.isFinite(rounds)) room.settings.roundsTotal = Math.min(15, Math.max(3, rounds));
     const dur = Math.round(Number(newSettings.roundDuration));
     if (Number.isFinite(dur)) room.settings.roundDuration = Math.min(60, Math.max(10, dur));
+    const maxP = Math.round(Number(newSettings.maxPlayers));
+    if (Number.isFinite(maxP)) {
+      const humanCount = room.players.filter((p) => !p.isBot).length;
+      const minAllowed = Math.max(2, humanCount);
+      room.settings.maxPlayers = Math.min(20, Math.max(minAllowed, maxP));
+      while (room.players.length > room.settings.maxPlayers) {
+        const lastBotIdx = room.players.map((p) => p.isBot).lastIndexOf(true);
+        if (lastBotIdx === -1) break;
+        room.players.splice(lastBotIdx, 1);
+      }
+    }
     if (typeof newSettings.theme === "string") {
       const themes = new Set(getAllCategories().map((c) => c.theme));
       if (newSettings.theme === "all" || themes.has(newSettings.theme)) room.settings.theme = newSettings.theme;
@@ -1453,7 +1481,7 @@ io.on("connection", (socket) => {
   socket.on("room:addBot", () => {
     if (!currentRoomCode) return;
     const room = rooms.get(currentRoomCode);
-    if (!room || room.state !== "LOBBY" || room.players.length >= 8) return;
+    if (!room || room.state !== "LOBBY" || room.players.length >= (room.settings.maxPlayers || 8)) return;
 
     const existingBotNames = new Set(room.players.filter((p) => p.isBot).map((p) => p.name));
     const availableProfile =
@@ -1533,28 +1561,39 @@ io.on("connection", (socket) => {
 
   // 7. Submit Jawaban Selama Ronde Berlangsung (Hybrid: Database Lokal + Groq Multi-Model AI Judge)
   socket.on("round:submit", async ({ answer }, callback) => {
-    if (!currentRoomCode) return;
+    const replyErr = (msg, extra = {}) => {
+      if (typeof callback === "function") {
+        callback({ valid: false, message: msg, ...extra });
+      }
+    };
+    if (!currentRoomCode) return replyErr("Room tidak ditemukan.");
     const room = rooms.get(currentRoomCode);
-    if (!room || room.state !== "PLAYING") return;
+    if (!room || room.state !== "PLAYING") return replyErr("Ronde belum aktif atau sudah berakhir.");
 
     const player = room.players.find((p) => p.id === socket.id);
-    if (!player) return;
+    if (!player) return replyErr("Pemain tidak ditemukan di room.");
+    if (player.isCheckingAi) {
+      return replyErr("Jawaban sedang diperiksa Sonar AI...", { checking: true });
+    }
 
     const currentCat = room.selectedCategories[room.currentRound - 1];
-    if (!currentCat) return;
+    if (!currentCat) return replyErr("Kategori ronde tidak ditemukan.");
 
     let match = matchCategoryAnswer(currentCat, answer);
     let aiModelUsed = null;
     let aiError = false;
 
     if (!match && ai.isEnabled() && (answer || "").trim().length >= 2) {
+      player.isCheckingAi = true;
       try {
         const aiVerdict = await ai.validateAnswerWithAI(
           currentCat.title,
           currentCat.hint,
           (answer || "").trim()
         );
-        if (room.state !== "PLAYING") return; // Pastikan ronde belum keburu habis
+        if (room.state !== "PLAYING") {
+          return replyErr("Waktu ronde keburu habis.");
+        }
         if (aiVerdict && aiVerdict.valid) {
           if (!runtimeData.aiLearnedAnswers) runtimeData.aiLearnedAnswers = {};
           if (!runtimeData.aiLearnedAnswers[currentCat.id]) {
@@ -1574,20 +1613,18 @@ io.on("connection", (socket) => {
       } catch (err) {
         aiError = true;
         console.warn("[AI] Gagal memvalidasi jawaban:", err.message);
+      } finally {
+        player.isCheckingAi = false;
       }
     }
 
     if (!match) {
-      if (typeof callback === "function") {
-        callback({
-          valid: false,
-          aiError,
-          message: aiError
-            ? "Sonar AI sedang sibuk/gangguan, coba kirim ulang atau gunakan jawaban lain!"
-            : `Sonar tidak mendeteksi "${(answer || "").trim()}" di kategori ini. Coba istilah lain!`
-        });
-      }
-      return;
+      return replyErr(
+        aiError
+          ? "Sonar AI sedang sibuk/gangguan, coba kirim ulang atau gunakan jawaban lain!"
+          : `Sonar tidak mendeteksi "${(answer || "").trim()}" di kategori ini. Coba istilah lain!`,
+        { aiError }
+      );
     }
 
     room.roundSubmissions[socket.id] = {

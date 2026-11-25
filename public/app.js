@@ -1286,17 +1286,19 @@ async function loadHomeInfo() {
       prContainer.innerHTML = `<div class="empty-state">Belum ada room publik di lobby. Klik <strong>Arena Cepat</strong> atau <strong>Buat Room Party</strong>!</div>`;
     } else {
       prContainer.innerHTML = data.publicRooms
-        .map(
-          (r) => `
+        .map((r) => {
+          const maxP = r.maxPlayers || 8;
+          const isFull = r.playerCount >= maxP;
+          return `
           <div class="lb-item">
             <div class="lb-left">
               <strong style="color:#facc15;letter-spacing:1px;">${r.code}</strong>
-              <span>• Host: ${escapeHtml(r.hostName)} (${r.playerCount}/8)</span>
+              <span>• Host: ${escapeHtml(r.hostName)} (${r.playerCount}/${maxP})</span>
             </div>
-            <button class="btn-small" onclick="joinRoomByCode('${r.code}')">Gabung</button>
+            <button class="btn-small" onclick="joinRoomByCode('${r.code}')" ${isFull ? "disabled" : ""}>${isFull ? "Penuh" : "Gabung"}</button>
           </div>
-        `
-        )
+        `;
+        })
         .join("");
     }
     document.getElementById("conn-text").textContent = "Server Online";
@@ -1355,17 +1357,19 @@ if (socket) {
       return;
     }
     prContainer.innerHTML = publicRooms
-      .map(
-        (r) => `
+      .map((r) => {
+        const maxP = r.maxPlayers || 8;
+        const isFull = r.playerCount >= maxP;
+        return `
         <div class="lb-item">
           <div class="lb-left">
             <strong style="color:#facc15;letter-spacing:1px;">${r.code}</strong>
-            <span>• Host: ${escapeHtml(r.hostName)} (${r.playerCount}/8)</span>
+            <span>• Host: ${escapeHtml(r.hostName)} (${r.playerCount}/${maxP})</span>
           </div>
-          <button class="btn-small" onclick="joinRoomByCode('${r.code}')">Gabung</button>
+          <button class="btn-small" onclick="joinRoomByCode('${r.code}')" ${isFull ? "disabled" : ""}>${isFull ? "Penuh" : "Gabung"}</button>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
   });
 }
@@ -1623,9 +1627,14 @@ document.getElementById("btn-leave-lobby").addEventListener("click", () => {
 function renderLobby(room) {
   document.getElementById("lobby-room-code").textContent = room.code;
   document.getElementById("lobby-player-count").textContent = room.players.length;
+  const maxP = (room.settings && room.settings.maxPlayers) || 8;
+  const maxEl = document.getElementById("lobby-max-players");
+  if (maxEl) maxEl.textContent = maxP;
 
   const myId = socket ? socket.id : "me";
   const isHost = room.hostId === myId;
+  const btnAddBot = document.getElementById("btn-add-bot");
+  if (btnAddBot) btnAddBot.disabled = !isHost || room.players.length >= maxP;
   const mePlayer = room.players.find((p) => p.id === myId);
   const playersContainer = document.getElementById("lobby-players-list");
 
@@ -1675,16 +1684,18 @@ function renderLobby(room) {
   const selTheme = document.getElementById("setting-theme");
   const selRounds = document.getElementById("setting-rounds");
   const selDuration = document.getElementById("setting-duration");
+  const inpMaxPlayers = document.getElementById("setting-maxplayers");
   const chkCollision = document.getElementById("setting-collision");
 
   selMode.value = room.settings.gameMode || "competitive";
   selTheme.value = room.settings.theme || "all";
   selRounds.value = String(room.settings.roundsTotal || 7);
   selDuration.value = String(room.settings.roundDuration || 25);
+  if (inpMaxPlayers) inpMaxPlayers.value = String(maxP);
   chkCollision.checked = room.settings.collisionRule !== false;
 
-  [selMode, selTheme, selRounds, selDuration, chkCollision].forEach((el) => {
-    el.disabled = !isHost;
+  [selMode, selTheme, selRounds, selDuration, inpMaxPlayers, chkCollision].forEach((el) => {
+    if (el) el.disabled = !isHost;
   });
 }
 
@@ -1708,15 +1719,19 @@ document.getElementById("btn-qr-room").addEventListener("click", () => {
   openMobileHubModal(currentRoom.code);
 });
 
-["setting-gamemode", "setting-theme", "setting-rounds", "setting-duration", "setting-collision"].forEach(
+["setting-gamemode", "setting-theme", "setting-rounds", "setting-duration", "setting-maxplayers", "setting-collision"].forEach(
   (id) => {
-    document.getElementById(id).addEventListener("change", () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
       if (!socket) return;
+      const maxVal = document.getElementById("setting-maxplayers");
       socket.emit("room:settings", {
         gameMode: document.getElementById("setting-gamemode").value,
         theme: document.getElementById("setting-theme").value,
         roundsTotal: Number(document.getElementById("setting-rounds").value),
         roundDuration: Number(document.getElementById("setting-duration").value),
+        maxPlayers: maxVal ? Number(maxVal.value) || 8 : 8,
         collisionRule: document.getElementById("setting-collision").checked
       });
     });
@@ -1954,6 +1969,7 @@ function handleRoundStartUI(payload) {
 
   formAnswer.classList.remove("hidden");
   lockedPanel.classList.add("hidden");
+  setAnswerSubmitting(false);
   feedback.textContent = "";
   feedback.className = "sonar-feedback";
   inputAnswer.value = "";
@@ -2021,8 +2037,39 @@ if (socket) {
 }
 
 // Submit Jawaban (Mendukung Online Server & Offline Mandiri HP)
+let isSubmittingAnswer = false;
+let submitSafetyTimer = null;
+
+function setAnswerSubmitting(pending, waitingForAi = false) {
+  isSubmittingAnswer = pending;
+  if (submitSafetyTimer) {
+    clearTimeout(submitSafetyTimer);
+    submitSafetyTimer = null;
+  }
+  const btnSubmit = document.getElementById("btn-submit-answer");
+  const inputAnswer = document.getElementById("input-answer");
+  const feedback = document.getElementById("sonar-feedback");
+  if (btnSubmit) {
+    btnSubmit.disabled = pending;
+    btnSubmit.textContent = pending ? "⏳ AI..." : "SELAM!";
+  }
+  if (inputAnswer) {
+    inputAnswer.readOnly = pending;
+  }
+  if (pending && waitingForAi && feedback) {
+    feedback.textContent = "🤖 Jawaban belum ada di kamus lokal — menunggu Sonar AI memeriksa...";
+    feedback.className = "sonar-feedback checking";
+  }
+  if (pending) {
+    submitSafetyTimer = setTimeout(() => {
+      setAnswerSubmitting(false);
+    }, 16000);
+  }
+}
+
 document.getElementById("form-answer").addEventListener("submit", (e) => {
   e.preventDefault();
+  if (isSubmittingAnswer) return;
   const inputAnswer = document.getElementById("input-answer");
   const raw = inputAnswer.value.trim();
   if (!raw) return;
@@ -2053,7 +2100,15 @@ document.getElementById("form-answer").addEventListener("submit", (e) => {
     return;
   }
 
+  const localCat =
+    currentRoom && currentRoom.category
+      ? getLocalCategories().find((c) => c.id === currentRoom.category.id)
+      : null;
+  const knownLocally = Boolean(localCat && matchLocalAnswer(localCat, raw));
+  setAnswerSubmitting(true, !knownLocally);
+
   socket.emit("round:submit", { answer: raw }, (res) => {
+    setAnswerSubmitting(false);
     if (!res) return;
     if (!res.valid) {
       playErrorBuzz();
@@ -2062,6 +2117,7 @@ document.getElementById("form-answer").addEventListener("submit", (e) => {
       wrapper.classList.add("shake");
       feedback.textContent = `❌ ${res.message}`;
       feedback.className = "sonar-feedback error";
+      inputAnswer.focus();
       inputAnswer.select();
       return;
     }
@@ -2116,6 +2172,7 @@ document.getElementById("btn-use-reroll").addEventListener("click", () => {
 function unlockRerollUI() {
   playSonarPing(660, 0.15);
   triggerHaptic(30);
+  setAnswerSubmitting(false);
   document.getElementById("locked-answer-panel").classList.add("hidden");
   document.getElementById("form-answer").classList.remove("hidden");
   const inputAnswer = document.getElementById("input-answer");
@@ -3326,6 +3383,7 @@ if (btnCloseRevealDetail && revealDetailDrawer && btnToggleRevealDetail) {
 // ============================================================================
 function handleRoundRevealUI(payload) {
   setBgmMood("calm");
+  setAnswerSubmitting(false);
   if (typeof oceanWorld !== "undefined") {
     oceanWorld.pufferVictimId = payload.pufferEvent ? payload.pufferEvent.victimId : null;
     oceanWorld.megalodonStrikeStart = payload.pufferEvent ? performance.now() : null;

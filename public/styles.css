@@ -291,6 +291,7 @@ body {
 }
 
 input[type="text"],
+input[type="number"],
 select,
 textarea {
   width: 100%;
@@ -306,6 +307,7 @@ textarea {
 }
 
 input[type="text"]:focus,
+input[type="number"]:focus,
 select:focus,
 textarea:focus {
   border-color: var(--cyan);
@@ -3800,4 +3802,16 @@ body:has(#screen-home:not(.active)) .mobile-bottom-nav {
   padding: 0.25rem 0.55rem;
   font-size: 0.72rem;
   margin: 0;
+}
+.btn-submit-dive:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  filter: grayscale(0.2);
+}
+#input-answer[readonly] {
+  opacity: 0.75;
+}
+.sonar-feedback.checking {
+  color: #38bdf8;
+  font-weight: 700;
 }
