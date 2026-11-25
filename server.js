@@ -570,7 +570,7 @@ function shuffleArray(arr) {
 
 async function expandQuestionBankWithAI(preferredTheme = "all") {
   if (!ai.isEnabled() || isExpandingAiBank) return;
-  if ((runtimeData.customCategories || []).length >= 50) return;
+  if ((runtimeData.customCategories || []).length >= 100) return;
   isExpandingAiBank = true;
   try {
     const existingTitles = getAllCategories().map((c) => c.title);
@@ -615,8 +615,8 @@ function selectCategoriesForRoom(room) {
   const staticFresh = shuffleArray(filtered.filter((c) => !String(c.id).startsWith("ai-") && !recentSet.has(c.id)));
   const stalePool = shuffleArray(filtered.filter((c) => recentSet.has(c.id)));
 
-  // Pastikan minimal 3 soal dari AI masuk ke dalam ronde jika tersedia
-  const targetAiCount = Math.min(aiFresh.length, Math.max(2, Math.floor(room.settings.roundsTotal / 2)));
+  // Campurkan hingga 2 soal AI segar dengan soal terkurasi yang belum pernah muncul baru-baru ini
+  const targetAiCount = Math.min(aiFresh.length, 2);
   const pickedAi = aiFresh.slice(0, targetAiCount);
   const remainingNeeded = Math.max(0, room.settings.roundsTotal - pickedAi.length);
   const restPool = [...staticFresh, ...aiFresh.slice(targetAiCount), ...stalePool];
@@ -626,7 +626,7 @@ function selectCategoriesForRoom(room) {
     const idx = recentPlayedCategoryIds.indexOf(c.id);
     if (idx !== -1) recentPlayedCategoryIds.splice(idx, 1);
     recentPlayedCategoryIds.push(c.id);
-    if (recentPlayedCategoryIds.length > 16) recentPlayedCategoryIds.shift();
+    if (recentPlayedCategoryIds.length > 42) recentPlayedCategoryIds.shift();
   });
 
   return picked;

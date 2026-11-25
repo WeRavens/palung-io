@@ -684,12 +684,35 @@ function matchLocalAnswer(category, rawInput) {
   return null;
 }
 
+function shuffleClientArray(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function startLocalOfflineMatch({ isDaily = false } = {}) {
   clearClientTimers();
   isLocalOfflineGame = true;
   const { name, avatar } = getIdentity();
   const allCats = getLocalCategories();
-  const selected = [...allCats].sort(() => Math.random() - 0.5).slice(0, 7);
+  let recentIds = [];
+  try {
+    recentIds = JSON.parse(localStorage.getItem("palung_recent_offline_cats") || "[]");
+    if (!Array.isArray(recentIds)) recentIds = [];
+  } catch (e) {
+    recentIds = [];
+  }
+  const recentSet = new Set(recentIds);
+  const fresh = shuffleClientArray(allCats.filter((c) => !recentSet.has(c.id)));
+  const stale = shuffleClientArray(allCats.filter((c) => recentSet.has(c.id)));
+  const selected = [...fresh, ...stale].slice(0, 7);
+  try {
+    const updated = [...recentIds.filter((id) => !selected.some((c) => c.id === id)), ...selected.map((c) => c.id)].slice(-35);
+    localStorage.setItem("palung_recent_offline_cats", JSON.stringify(updated));
+  } catch (e) {}
 
   currentRoom = {
     code: isDaily ? "HARI" : "SOLO",

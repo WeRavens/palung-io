@@ -935,6 +935,16 @@ const CATEGORIES = [
 
 const { EXTRA_CATEGORIES } = require("./extraCategories");
 const { MORE_CATEGORIES } = require("./moreCategories");
-const ALL_CATEGORIES = [...CATEGORIES, ...EXTRA_CATEGORIES, ...MORE_CATEGORIES];
+const { PACK1_CATEGORIES } = require("./categoriesPack1");
+const { PACK2_CATEGORIES } = require("./categoriesPack2");
+const { PACK3_CATEGORIES } = require("./categoriesPack3");
+const ALL_CATEGORIES = [
+  ...CATEGORIES,
+  ...EXTRA_CATEGORIES,
+  ...MORE_CATEGORIES,
+  ...PACK1_CATEGORIES,
+  ...PACK2_CATEGORIES,
+  ...PACK3_CATEGORIES
+];
 
 module.exports = { CATEGORIES: ALL_CATEGORIES };

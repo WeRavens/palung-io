@@ -171,9 +171,14 @@ async function generateCategoryWithAI(topic, theme = "umum") {
         throw new Error("AI tidak mengembalikan format kategori yang valid.");
       }
 
+      let cleanTitle = String(parsed.title || `Sebutkan ${topic}`)
+        .replace(/^Sebutkan\s+\d+\s+/i, "Sebutkan ")
+        .trim();
+      cleanTitle = cleanTitle.replace(/^Sebutkan\s+([a-z])/, (_, ch) => `Sebutkan ${ch.toUpperCase()}`);
+
       return {
         modelUsed: model,
-        title: String(parsed.title || `Sebutkan ${topic}`).trim(),
+        title: cleanTitle,
         hint: String(parsed.hint || `Kategori seputar ${topic}`).trim(),
         educationalNote: String(parsed.educationalNote || `Kategori edukasi tentang ${topic}.`).trim(),
         answers: parsed.answers
@@ -192,44 +197,49 @@ async function generateCategoryWithAI(topic, theme = "umum") {
 }
 
 const RANDOM_TOPIC_SEEDS = [
-  { topic: "Benda & Fenomena di Luar Angkasa", theme: "sains" },
-  { topic: "Makanan Fermentasi dari Berbagai Negara", theme: "kuliner" },
-  { topic: "Alat Musik Tradisional Dunia & Nusantara", theme: "budaya" },
-  { topic: "Penemuan Bersejarah yang Mengubah Dunia", theme: "sejarah" },
-  { topic: "Hewan Nokturnal yang Aktif di Malam Hari", theme: "sains" },
-  { topic: "Danau Terkenal di Dunia", theme: "geografi" },
-  { topic: "Unsur Kimia dalam Tabel Periodik", theme: "sains" },
-  { topic: "Rempah-Rempah Khas Nusantara & Dunia", theme: "kuliner" },
-  { topic: "Tumbuhan Unik & Langka", theme: "sains" },
-  { topic: "Bahasa Daerah di Indonesia", theme: "nusantara" },
-  { topic: "Gunung Berapi Aktif di Dunia", theme: "geografi" },
-  { topic: "Kerajaan Kuno di Nusantara", theme: "sejarah" },
-  { topic: "Batu Permata & Mineral Alam", theme: "sains" },
-  { topic: "Minuman Tradisional Khas Indonesia", theme: "kuliner" },
-  { topic: "Transportasi Laut & Jenis Kapal", theme: "umum" },
-  { topic: "Organ & Bagian Tubuh Manusia", theme: "sains" },
-  { topic: "Dinosaurus & Hewan Purba", theme: "sains" },
-  { topic: "Kota Pelabuhan Bersejarah di Dunia", theme: "geografi" },
-  { topic: "Burung Pemangsa & Burung Langka", theme: "sains" },
-  { topic: "Olahraga Air & Olimpiade", theme: "umum" },
-  { topic: "Tarian Tradisional Nusantara", theme: "nusantara" },
-  { topic: "Buah-Buahan Tropis Eksotis", theme: "kuliner" },
-  { topic: "Ikan & Biota Laut Dalam", theme: "sains" },
-  { topic: "Situs Warisan Dunia UNESCO", theme: "geografi" },
-  { topic: "Senjata Tradisional Nusantara", theme: "nusantara" },
-  { topic: "Planet, Bulan & Satelit Alami Tata Surya", theme: "sains" },
-  { topic: "Cabang Ilmu Sains & Kedokteran", theme: "sains" },
-  { topic: "Kue & Jajanan Pasar Indonesia", theme: "kuliner" }
+  { topic: "Satelit Alami & Bulan di Tata Surya", theme: "sains" },
+  { topic: "Tanaman Obat & Bahan Jamu Tradisional Nusantara", theme: "nusantara" },
+  { topic: "Pelukis & Seniman Terkenal Dunia", theme: "umum" },
+  { topic: "Festival Budaya Terkenal di Dunia & Indonesia", theme: "umum" },
+  { topic: "Istilah Pelayaran, Kapal Laut & Navigasi", theme: "umum" },
+  { topic: "Roti & Kue Tradisional Berbagai Negara", theme: "umum" },
+  { topic: "Atlet & Legenda Olahraga Dunia", theme: "umum" },
+  { topic: "Kerajinan Tangan Khas Daerah Indonesia", theme: "nusantara" },
+  { topic: "Fenomena Optik & Pemandangan Langit Langka", theme: "sains" },
+  { topic: "Paus & Mamalia Laut Dalam", theme: "sains" },
+  { topic: "Perangkat Fotografi & Istilah Film", theme: "umum" },
+  { topic: "Cabang Olahraga Bela Diri Dunia", theme: "umum" },
+  { topic: "Bahan Tekstil, Serat & Kain Dunia", theme: "umum" },
+  { topic: "Bahasa Resmi Negara-Negara di Dunia", theme: "geografi" },
+  { topic: "Jembatan & Terowongan Terkenal di Dunia", theme: "geografi" },
+  { topic: "Air Terjun Terkenal di Indonesia & Dunia", theme: "geografi" },
+  { topic: "Kawah & Gunung Berapi Aktif di Dunia", theme: "geografi" },
+  { topic: "Makanan Fermentasi dari Berbagai Negara", theme: "umum" },
+  { topic: "Jamur Konsumsi & Jamur Unik di Alam", theme: "sains" },
+  { topic: "Bakteri, Virus & Mikroorganisme Penting", theme: "sains" },
+  { topic: "Partikel Subatom & Hukum Fisika Terkenal", theme: "sains" },
+  { topic: "Kopi & Varietas Teh Terkenal Dunia", theme: "umum" },
+  { topic: "Rumah Ibadah Bersejarah di Indonesia", theme: "nusantara" },
+  { topic: "Selat, Teluk & Semenanjung di Indonesia", theme: "nusantara" },
+  { topic: "Hewan Endemik Langka Indonesia Selain Komodo", theme: "nusantara" },
+  { topic: "Pelabuhan & Bandara Tersibuk di Dunia", theme: "geografi" },
+  { topic: "Komposer Musik Klasik & Soundtrack Dunia", theme: "umum" },
+  { topic: "Istilah Arsitektur & Bagian Bangunan", theme: "umum" }
 ];
 
 async function generateRandomCategoryWithAI(existingTitles = [], preferredTheme = "all") {
   const lowerSet = new Set(existingTitles.map((t) => String(t).toLowerCase()));
-  let pool = RANDOM_TOPIC_SEEDS.filter(
-    (s) =>
-      (preferredTheme === "all" || s.theme === preferredTheme) &&
-      !lowerSet.has(s.topic.toLowerCase()) &&
-      ![...lowerSet].some((ex) => ex.includes(s.topic.split(" ")[0].toLowerCase()))
-  );
+  let pool = RANDOM_TOPIC_SEEDS.filter((s) => {
+    if (preferredTheme !== "all" && s.theme !== preferredTheme) return false;
+    const prefix = s.topic.split(" ").slice(0, 2).join(" ").toLowerCase();
+    return !lowerSet.has(s.topic.toLowerCase()) && ![...lowerSet].some((ex) => ex.includes(prefix));
+  });
+  if (pool.length === 0) {
+    pool =
+      preferredTheme === "all"
+        ? RANDOM_TOPIC_SEEDS
+        : RANDOM_TOPIC_SEEDS.filter((s) => s.theme === preferredTheme);
+  }
   if (pool.length === 0) pool = RANDOM_TOPIC_SEEDS;
   const pick = pool[Math.floor(Math.random() * pool.length)];
   const result = await generateCategoryWithAI(pick.topic, pick.theme);
