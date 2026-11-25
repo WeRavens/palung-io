@@ -149,6 +149,14 @@
   function ensureCard() {
     let card = document.getElementById("progress-card");
     if (card) return card;
+    const slot = document.getElementById("captain-progress-slot");
+    if (slot) {
+      card = document.createElement("div");
+      card.id = "progress-card";
+      card.className = "progress-card";
+      slot.appendChild(card);
+      return card;
+    }
     const anchor = document.querySelector("#screen-home .hero-cta");
     if (!anchor) return null;
     card = document.createElement("div");

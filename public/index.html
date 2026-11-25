@@ -76,20 +76,20 @@
         <span class="zone-dot" id="conn-dot"></span>
         <span id="conn-text">Mode Mandiri</span>
       </div>
-      <div class="depth-zone-pill hide-on-small" id="ambient-zone-indicator">
+      <div class="depth-zone-pill hide-on-small hidden" id="ambient-zone-indicator">
         <span id="ambient-zone-text">Zona Permukaan (0m)</span>
       </div>
       <button class="icon-btn btn-highlight-mobile hide-on-small" id="btn-open-mobile-hub" title="Buka di HP / Scan QR / Install App">
-        📲 Main di HP / QR
+        📲 QR / APK
       </button>
-      <button class="icon-btn hide-on-small" id="btn-toggle-phone-frame" title="Simulasi Tampilan Layar HP di Komputer">
+      <button class="icon-btn hide-on-small hidden" id="btn-toggle-phone-frame" title="Simulasi Tampilan Layar HP di Komputer">
         📱 Mode Layar HP
       </button>
       <button class="icon-btn hide-on-small" id="btn-open-workshop" title="Buat Kategori Baru (Workshop)">
-        ➕ Buat Kategori
+        ➕ Buat Kuis
       </button>
       <button class="icon-btn" id="btn-sound-toggle" title="Backsound Samudra, Suara Sonar & Getar Haptic On/Off">
-        🎵🔊
+        🔊
       </button>
     </div>
   </header>
@@ -121,182 +121,203 @@
 
       <!-- ==================== LAYAR 1: BERANDA (HOME HUB) ==================== -->
       <section id="screen-home" class="screen active">
-        <div class="hero-banner">
-          <div class="hero-badge">🌊 Trivia kelangkaan khas Indonesia</div>
-          <h1 class="hero-title">Semakin <span class="text-gradient-gold">Langka</span> Jawabanmu,<br/>Semakin <span class="text-gradient-cyan">Dalam</span> Kapal Selammu!</h1>
-          <p class="hero-desc">
-            Sebutkan jawaban untuk pertanyaan terbuka. <strong>Makin langka jawabanmu, makin dalam kapal selammu</strong> sampai Palung Mariana (7.000m)!
-          </p>
-
-          <div class="hero-cta">
-            <button type="button" class="btn-hero-play" id="btn-hero-play">⚡ MAIN SEKARANG</button>
-            <small>Langsung masuk arena, tanpa daftar.</small>
+        <div class="home-hero-compact">
+          <div class="hero-top-pills">
+            <span class="hero-pill-stat">📚 <strong id="stat-total-categories">75</strong> Kategori • 💎 <strong id="stat-total-answers">2.094+</strong> Jawaban</span>
+            <button type="button" class="hero-howto-btn" id="btn-toggle-howto" aria-expanded="false">❓ Cara Main</button>
           </div>
+          <h1 class="hero-title-compact">
+            Semakin <span class="text-gradient-gold">Langka</span> Jawabanmu,
+            Semakin <span class="text-gradient-cyan">Dalam</span> Selammu!
+          </h1>
 
-          <!-- Bar Indikator Tier Kelangkaan -->
-          <details class="howto">
-            <summary>❓ Cara main &amp; tingkat kelangkaan</summary>
+          <div id="howto-panel" class="howto-drawer hidden">
             <ol class="howto-steps">
-              <li>Baca pertanyaan, lalu ketik satu jawaban sebelum waktu habis.</li>
-              <li>Jawaban umum hanya dangkal; jawaban langka menyelam jauh.</li>
-              <li>Jawaban sama dengan pemain lain bertabrakan (&minus;50%).</li>
-              <li>Oksigen menipis kalau terus memilih jawaban umum.</li>
+              <li>Ketik satu jawaban yang tepat &amp; seunik mungkin sebelum waktu habis.</li>
+              <li>Jawaban pasaran cuma dangkal; jawaban langka menyelam jauh ke dasar palung.</li>
+              <li>Hati-hati jawaban kembar dengan pemain lain (&minus;50% kedalaman).</li>
+              <li>Jaga oksigen tetap penuh dengan menghindari jawaban terlalu umum!</li>
             </ol>
             <div class="tier-showcase">
-            <div class="tier-chip tier-plankton">
-              <span class="t-emoji">🟢</span>
-              <div>
-                <strong>PLANKTON (Umum)</strong>
-                <small>+100m s/d 340m</small>
+              <div class="tier-chip tier-plankton">
+                <span class="t-emoji">🟢</span>
+                <div>
+                  <strong>PLANKTON (Umum)</strong>
+                  <small>+100m s/d 340m</small>
+                </div>
               </div>
-            </div>
-            <div class="tier-chip tier-karang">
-              <span class="t-emoji">🔵</span>
-              <div>
-                <strong>KARANG (Unik)</strong>
-                <small>+350m s/d 640m</small>
+              <div class="tier-chip tier-karang">
+                <span class="t-emoji">🔵</span>
+                <div>
+                  <strong>KARANG (Unik)</strong>
+                  <small>+350m s/d 640m</small>
+                </div>
               </div>
-            </div>
-            <div class="tier-chip tier-abisal">
-              <span class="t-emoji">🟣</span>
-              <div>
-                <strong>ABISAL (Langka)</strong>
-                <small>+650m s/d 880m</small>
+              <div class="tier-chip tier-abisal">
+                <span class="t-emoji">🟣</span>
+                <div>
+                  <strong>ABISAL (Langka)</strong>
+                  <small>+650m s/d 880m</small>
+                </div>
               </div>
-            </div>
-            <div class="tier-chip tier-legenda">
-              <span class="t-emoji">🟡</span>
-              <div>
-                <strong>LEGENDA PALUNG</strong>
-                <small>+890m s/d 1.000m</small>
+              <div class="tier-chip tier-legenda">
+                <span class="t-emoji">🟡</span>
+                <div>
+                  <strong>LEGENDA PALUNG</strong>
+                  <small>+890m s/d 1.000m</small>
+                </div>
               </div>
-            </div>
-            <div class="tier-chip tier-collision">
-              <span class="t-emoji">💥</span>
-              <div>
-                <strong>AWAS TABRAKAN!</strong>
-                <small>Jawaban sama = -50%</small>
+              <div class="tier-chip tier-collision">
+                <span class="t-emoji">💥</span>
+                <div>
+                  <strong>AWAS TABRAKAN!</strong>
+                  <small>Jawaban sama = -50%</small>
+                </div>
               </div>
             </div>
           </div>
-          </details>
         </div>
 
-        <div class="home-grid">
-          <!-- Kartu Profil Kapten Kapal Selam -->
-          <div class="glass-card profile-card">
-            <details class="profile-details" id="profile-details">
-              <summary class="card-title">⚓ <span id="profile-summary-text">Identitas Penyelam</span> <small>ubah</small></summary>
-            <div class="form-group">
-              <label for="input-player-name">Nama Kapten</label>
-              <input type="text" id="input-player-name" maxlength="20" placeholder="Ketik namamu..." value="Kapten Samudra" />
-            </div>
-
-            <div class="form-group">
-              <label>Pilih Kapal Selam / Maskot Laut</label>
-              <div class="avatar-grid" id="avatar-selector">
-                <button type="button" class="avatar-btn selected" data-avatar="🤿">🤿</button>
-                <button type="button" class="avatar-btn" data-avatar="🐙">🐙</button>
-                <button type="button" class="avatar-btn" data-avatar="🦈">🦈</button>
-                <button type="button" class="avatar-btn" data-avatar="🐳">🐳</button>
-                <button type="button" class="avatar-btn" data-avatar="🪼">🪼</button>
-                <button type="button" class="avatar-btn" data-avatar="🐬">🐬</button>
-                <button type="button" class="avatar-btn" data-avatar="🦀">🦀</button>
-                <button type="button" class="avatar-btn" data-avatar="🐡">🐡</button>
+        <div class="home-hub-grid">
+          <!-- KOLOM UTAMA: IDENTITAS KAPTEN + EKSPEDISI BERMAIN -->
+          <div class="home-col-main">
+            <div class="glass-card captain-dock-card">
+              <div class="captain-row">
+                <button type="button" class="captain-avatar-trigger" id="btn-avatar-trigger" title="Ganti Maskot Kapal Selam">
+                  <span id="captain-avatar-preview">🤿</span>
+                  <small class="avatar-edit-dot">▾</small>
+                </button>
+                <div class="captain-name-wrap">
+                  <label for="input-player-name">NAMA KAPTEN</label>
+                  <input type="text" id="input-player-name" maxlength="20" placeholder="Ketik namamu..." value="Kapten Samudra" />
+                </div>
               </div>
+
+              <div id="avatar-drawer" class="avatar-drawer hidden">
+                <div class="avatar-drawer-label">Pilih Maskot Kapal Selam:</div>
+                <div class="avatar-grid" id="avatar-selector">
+                  <button type="button" class="avatar-btn selected" data-avatar="🤿">🤿</button>
+                  <button type="button" class="avatar-btn" data-avatar="🐙">🐙</button>
+                  <button type="button" class="avatar-btn" data-avatar="🦈">🦈</button>
+                  <button type="button" class="avatar-btn" data-avatar="🐳">🐳</button>
+                  <button type="button" class="avatar-btn" data-avatar="🪼">🪼</button>
+                  <button type="button" class="avatar-btn" data-avatar="🐬">🐬</button>
+                  <button type="button" class="avatar-btn" data-avatar="🦀">🦀</button>
+                  <button type="button" class="avatar-btn" data-avatar="🐡">🐡</button>
+                </div>
+              </div>
+
+              <div id="captain-progress-slot" class="captain-progress-slot"></div>
             </div>
 
-            </details>
-
-            <div class="stats-mini-box">
-              <div>📚 <strong id="stat-total-categories">20</strong> Kategori Kurasi</div>
-              <div>💎 <strong id="stat-total-answers">850+</strong> Fakta & Jawaban</div>
-            </div>
-          </div>
-
-          <!-- Kartu Pilihan Mode Permainan -->
-          <div class="glass-card modes-card">
-            <h2 class="card-title">🚀 Pilih Ekspedisi Penyelaman</h2>
-
-            <div class="mode-actions">
-              <div class="mode-group-label">🌐 Main bareng</div>
-              <!-- Mode 1: Quick Match Arena Multiplayer -->
-              <button class="mode-btn mode-quick" id="btn-quick-match">
+            <div class="glass-card modes-hub-card">
+              <!-- Primary CTA -->
+              <button class="mode-btn mode-quick mode-quick-hero" id="btn-quick-match">
                 <div class="mode-icon">⚡</div>
                 <div class="mode-info">
                   <div class="mode-head">
-                    <strong>Arena Cepat</strong>
-                    <span class="badge-hot">POPULER</span>
+                    <strong>Arena Cepat — Main Sekarang</strong>
+                    <span class="badge-hot">ONLINE &amp; BOT</span>
                   </div>
-                  <p>Langsung main bareng pemain lain dan bot. Online maupun offline.</p>
+                  <p>Langsung tanding 7 ronde bersama pemain lain atau AI bot tanpa ribet.</p>
                 </div>
+                <span class="mode-arrow">➜</span>
               </button>
 
-              <!-- Mode 4: Buat Room Party Bareng Teman -->
-              <div class="party-split">
-                <button class="mode-btn mode-create" id="btn-create-room">
-                  <div class="mode-icon">🚢</div>
+              <!-- Party Mabar -->
+              <div class="party-mabar-box">
+                <div class="party-mabar-head">
+                  <span>👥 <strong>Mabar Bareng Teman</strong></span>
+                  <button type="button" id="quick-open-rooms-pill" class="open-rooms-live-pill hidden">
+                    🟢 <span id="quick-open-rooms-num">0</span> Room Terbuka — Lihat
+                  </button>
+                </div>
+                <div class="party-split">
+                  <button class="mode-btn mode-create mode-create-compact" id="btn-create-room">
+                    <div class="mode-icon">🚢</div>
+                    <div class="mode-info">
+                      <strong>Buat Room Party</strong>
+                      <p>Atur mode (Kompetitif, Megalodon, Co-op) &amp; undang teman.</p>
+                    </div>
+                  </button>
+
+                  <div class="join-code-box">
+                    <label for="input-room-code">Gabung Pakai Kode 4 Huruf</label>
+                    <div class="join-input-row">
+                      <input type="text" id="input-room-code" maxlength="4" placeholder="ABCD" autocomplete="off" />
+                      <button class="btn-primary" id="btn-join-room">Gabung</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Secondary 2-Column Solo/Daily Modes -->
+              <div class="solo-modes-grid">
+                <button class="mode-btn mode-daily mode-compact-tile" id="btn-daily-challenge">
+                  <div class="mode-icon">🏆</div>
                   <div class="mode-info">
-                    <strong>Buat Room Party</strong>
-                    <p>Undang teman via Kode 4 Huruf, QR Code Wi-Fi, atau Share WhatsApp.</p>
+                    <div class="mode-head">
+                      <strong>Tantangan Harian</strong>
+                      <span class="badge-daily" id="badge-today-date">Hari Ini</span>
+                    </div>
+                    <p>7 soal serentak hari ini untuk adu skor global.</p>
                   </div>
                 </button>
 
-                <div class="join-code-box">
-                  <label>Punya Kode Room Teman?</label>
-                  <div class="join-input-row">
-                    <input type="text" id="input-room-code" maxlength="4" placeholder="KODE" />
-                    <button class="btn-primary" id="btn-join-room">Gabung</button>
+                <button class="mode-btn mode-offline mode-compact-tile" id="btn-offline-solo">
+                  <div class="mode-icon">📱</div>
+                  <div class="mode-info">
+                    <div class="mode-head">
+                      <strong>Latihan Offline</strong>
+                      <span class="badge-offline">TANPA KUOTA</span>
+                    </div>
+                    <p>Lawan 3 bot kapan saja di perangkat ini.</p>
                   </div>
-                </div>
+                </button>
               </div>
-
-              <div class="mode-group-label">🎯 Main sendiri</div>
-              <!-- Mode 2: Tantangan Harian Global -->
-              <button class="mode-btn mode-daily" id="btn-daily-challenge">
-                <div class="mode-icon">🏆</div>
-                <div class="mode-info">
-                  <div class="mode-head">
-                    <strong>Tantangan Harian</strong>
-                    <span class="badge-daily" id="badge-today-date">Hari Ini</span>
-                  </div>
-                  <p>7 kategori yang sama untuk semua pemain hari ini. Raih rekor dan bagikan hasilmu!</p>
-                </div>
-              </button>
-
-              <!-- Mode 3: Mode Offline Mandiri (100% On-Device Tanpa Sinyal) -->
-              <button class="mode-btn mode-offline" id="btn-offline-solo">
-                <div class="mode-icon">📱</div>
-                <div class="mode-info">
-                  <div class="mode-head">
-                    <strong>Mode Mandiri</strong>
-                    <span class="badge-offline">OFFLINE</span>
-                  </div>
-                  <p>Main sendiri melawan 3 bot, tanpa internet. Cocok untuk latihan.</p>
-                </div>
-              </button>
             </div>
           </div>
 
-          <!-- Kartu Leaderboard Harian & Room Publik Aktif -->
-          <div class="glass-card community-card">
-            <div class="tabs-header">
-              <button class="tab-btn active" data-tab="tab-leaderboard">🏆 Top Harian</button>
-              <button class="tab-btn" data-tab="tab-public-rooms">🌐 Room Terbuka</button>
-            </div>
+          <!-- KOLOM SAMPING: ROOM TERBUKA, TOP HARIAN & ALAT CEPAT -->
+          <div class="home-col-side">
+            <div id="community-card" class="glass-card community-card">
+              <div class="tabs-header">
+                <button class="tab-btn active" data-tab="tab-public-rooms">
+                  🌐 Room Terbuka <span id="open-rooms-tab-count" class="tab-count-badge">0</span>
+                </button>
+                <button class="tab-btn" data-tab="tab-leaderboard">🏆 Top Harian</button>
+              </div>
 
-            <div id="tab-leaderboard" class="tab-content active">
-              <p class="tab-subtitle">Penyelam terdalam di Tantangan Harian hari ini:</p>
-              <div id="daily-leaderboard-list" class="leaderboard-list">
-                <div class="empty-state">Belum ada penyelaman hari ini. Jadilah yang pertama menembus Palung!</div>
+              <div id="tab-public-rooms" class="tab-content active">
+                <p class="tab-subtitle">Room publik yang sedang menunggu penyelam:</p>
+                <div id="public-rooms-list" class="public-rooms-list">
+                  <div class="empty-state">Belum ada room publik di lobby. Klik "Buat Room Party" atau "Arena Cepat"!</div>
+                </div>
+              </div>
+
+              <div id="tab-leaderboard" class="tab-content">
+                <p class="tab-subtitle">Penyelam terdalam di Tantangan Harian hari ini:</p>
+                <div id="daily-leaderboard-list" class="leaderboard-list">
+                  <div class="empty-state">Belum ada penyelaman hari ini. Jadilah yang pertama menembus Palung!</div>
+                </div>
               </div>
             </div>
 
-            <div id="tab-public-rooms" class="tab-content">
-              <p class="tab-subtitle">Room publik yang sedang menunggu penyelam:</p>
-              <div id="public-rooms-list" class="public-rooms-list">
-                <div class="empty-state">Belum ada room publik di lobby. Klik "Buat Room Party" atau "Arena Cepat"!</div>
-              </div>
+            <div class="home-quick-tools">
+              <button type="button" class="quick-tool-tile" id="btn-home-util-workshop">
+                <span class="qt-icon">🛠️</span>
+                <div>
+                  <strong>Buat Kategori Soal</strong>
+                  <small>Pakai AI atau tulis soalmu sendiri</small>
+                </div>
+              </button>
+              <button type="button" class="quick-tool-tile" id="btn-home-util-mobile">
+                <span class="qt-icon">📲</span>
+                <div>
+                  <strong>QR Wi-Fi &amp; Unduh APK</strong>
+                  <small>Main di Android atau mabar lokal</small>
+                </div>
+              </button>
             </div>
           </div>
         </div>
@@ -664,21 +685,17 @@
         <span class="mnav-icon">🏠</span>
         <span class="mnav-label">Beranda</span>
       </button>
-      <button class="mnav-item" data-action="quick">
-        <span class="mnav-icon">⚡</span>
-        <span class="mnav-label">Arena Cepat</span>
-      </button>
-      <button class="mnav-item" data-action="daily">
-        <span class="mnav-icon">🏆</span>
-        <span class="mnav-label">Harian</span>
-      </button>
-      <button class="mnav-item" data-action="mobilehub">
-        <span class="mnav-icon">📲</span>
-        <span class="mnav-label">QR & HP</span>
+      <button class="mnav-item" data-action="rooms">
+        <span class="mnav-icon">🌐</span>
+        <span class="mnav-label">Room &amp; Top</span>
       </button>
       <button class="mnav-item" data-action="workshop">
         <span class="mnav-icon">🛠️</span>
-        <span class="mnav-label">Buat Kuis</span>
+        <span class="mnav-label">Buat Soal</span>
+      </button>
+      <button class="mnav-item" data-action="mobilehub">
+        <span class="mnav-icon">📲</span>
+        <span class="mnav-label">QR &amp; APK</span>
       </button>
     </nav>
   </div>

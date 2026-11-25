@@ -1,4 +1,4 @@
-const CACHE_NAME = "palung-io-mobile-v6";
+const CACHE_NAME = "palung-io-mobile-v7";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
@@ -41,17 +41,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkRes) => {
-          if (networkRes && networkRes.status === 200 && event.request.method === "GET") {
-            const copy = networkRes.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return networkRes;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkRes) => {
+        if (networkRes && networkRes.status === 200 && event.request.method === "GET") {
+          const copy = networkRes.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return networkRes;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
