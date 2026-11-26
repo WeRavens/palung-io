@@ -78,6 +78,25 @@ function getAllCategories() {
   return [...CATEGORIES, ...(runtimeData.customCategories || [])];
 }
 
+function isWorkshopCategory(c) {
+  return Boolean(c && (c.source === "workshop" || String(c.id || "").startsWith("custom-")));
+}
+
+function sanitizePinnedCategoryIds(rawIds) {
+  if (!Array.isArray(rawIds)) return [];
+  const validSet = new Set(getAllCategories().map((c) => String(c.id)));
+  const cleaned = [];
+  const seen = new Set();
+  for (const id of rawIds) {
+    const strId = String(id || "").trim();
+    if (!strId || seen.has(strId) || !validSet.has(strId)) continue;
+    seen.add(strId);
+    cleaned.push(strId);
+    if (cleaned.length >= 15) break;
+  }
+  return cleaned;
+}
+
 // ============================================================================
 // UTILITAS NORMALISASI & FUZZY MATCHING JAWABAN
 // ============================================================================
@@ -358,7 +377,7 @@ const SUBMARINE_COLORS = [
 ];
 
 function normalizeRoomThemes(themeInput) {
-  const validThemes = new Set(["sains", "nusantara", "geografi", "umum", ...getAllCategories().map((c) => c.theme)]);
+  const validThemes = new Set(["sains", "nusantara", "geografi", "umum", "workshop", ...getAllCategories().map((c) => c.theme)]);
   const rawList = Array.isArray(themeInput)
     ? themeInput
     : typeof themeInput === "string"
@@ -406,6 +425,7 @@ function createRoom({
       maxPlayers: isDaily ? 8 : Math.min(20, Math.max(2, Math.round(Number(settings.maxPlayers)) || 8)),
       theme: normalizedThemes.theme,
       themes: normalizedThemes.themes,
+      pinnedCategoryIds: isDaily ? [] : sanitizePinnedCategoryIds(settings.pinnedCategoryIds),
       collisionRule: isDaily ? false : settings.collisionRule !== false,
       gameMode: isDaily ? "daily" : ["competitive", "coop", "tide", "puffer"].includes(settings.gameMode) ? settings.gameMode : "competitive"
     },
@@ -632,7 +652,24 @@ function selectCategoriesForRoom(room) {
     return getDailyCategories(getTodayKey());
   }
   const all = getAllCategories();
-  let filtered = all;
+  const catById = new Map(all.map((c) => [String(c.id), c]));
+
+  // Pasang soal pilihan host (misalnya dari Workshop) terlebih dahulu mulai Ronde 1
+  const pinnedCats = [];
+  const pinnedIdSet = new Set();
+  for (const pid of room.settings.pinnedCategoryIds || []) {
+    const cat = catById.get(String(pid));
+    if (cat && !pinnedIdSet.has(cat.id)) {
+      pinnedIdSet.add(cat.id);
+      pinnedCats.push(cat);
+      if (pinnedCats.length >= room.settings.roundsTotal) break;
+    }
+  }
+
+  const remainingNeeded = Math.max(0, room.settings.roundsTotal - pinnedCats.length);
+  const remainingPool = all.filter((c) => !pinnedIdSet.has(c.id));
+
+  let filtered = remainingPool;
   const activeThemes =
     Array.isArray(room.settings.themes) && room.settings.themes.length
       ? room.settings.themes
@@ -644,24 +681,46 @@ function selectCategoriesForRoom(room) {
       : ["all"];
   if (!activeThemes.includes("all")) {
     const themeSet = new Set(activeThemes);
-    filtered = all.filter((c) => themeSet.has(c.theme));
-  }
-  if (filtered.length < room.settings.roundsTotal) {
-    filtered = all;
+    filtered = remainingPool.filter((c) => themeSet.has(c.theme) || (themeSet.has("workshop") && isWorkshopCategory(c)));
   }
 
-  // Prioritaskan soal AI baru & soal yang belum muncul baru-baru ini agar setiap pertandingan terasa segar!
+  // Prioritaskan soal Workshop & AI baru serta soal yang belum muncul baru-baru ini!
   const recentSet = new Set(recentPlayedCategoryIds);
-  const aiFresh = shuffleArray(filtered.filter((c) => String(c.id).startsWith("ai-") && !recentSet.has(c.id)));
-  const staticFresh = shuffleArray(filtered.filter((c) => !String(c.id).startsWith("ai-") && !recentSet.has(c.id)));
-  const stalePool = shuffleArray(filtered.filter((c) => recentSet.has(c.id)));
+  const workshopFreshAll = filtered
+    .filter((c) => isWorkshopCategory(c) && !recentSet.has(c.id))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pickedWorkshop = workshopFreshAll.slice(0, Math.min(remainingNeeded, 2));
+  const pickedWsIds = new Set(pickedWorkshop.map((c) => c.id));
 
-  // Campurkan hingga 2 soal AI segar dengan soal terkurasi yang belum pernah muncul baru-baru ini
-  const targetAiCount = Math.min(aiFresh.length, 2);
-  const pickedAi = aiFresh.slice(0, targetAiCount);
-  const remainingNeeded = Math.max(0, room.settings.roundsTotal - pickedAi.length);
-  const restPool = [...staticFresh, ...aiFresh.slice(targetAiCount), ...stalePool];
-  const picked = shuffleArray([...pickedAi, ...restPool.slice(0, remainingNeeded)]);
+  const aiFreshAll = shuffleArray(
+    filtered.filter((c) => !pickedWsIds.has(c.id) && String(c.id).startsWith("ai-") && !recentSet.has(c.id))
+  );
+  const pickedAi = aiFreshAll.slice(0, Math.min(Math.max(0, remainingNeeded - pickedWorkshop.length), 2));
+  const pickedEarlyIds = new Set([...pickedWsIds, ...pickedAi.map((c) => c.id)]);
+
+  const staticFresh = shuffleArray(
+    filtered.filter(
+      (c) => !pickedEarlyIds.has(c.id) && !isWorkshopCategory(c) && !String(c.id).startsWith("ai-") && !recentSet.has(c.id)
+    )
+  );
+  const extraWorkshop = workshopFreshAll.slice(pickedWorkshop.length);
+  const extraAi = aiFreshAll.slice(pickedAi.length);
+  const stalePool = shuffleArray(filtered.filter((c) => !pickedEarlyIds.has(c.id) && recentSet.has(c.id)));
+
+  const restFiltered = [...staticFresh, ...extraWorkshop, ...extraAi, ...stalePool];
+  const fillSelected = [...pickedWorkshop, ...pickedAi, ...restFiltered].slice(0, remainingNeeded);
+
+  // Jika tema terpilih memiliki lebih sedikit soal dari jumlah ronde, lengkapi kekurangannya saja dari bank lain
+  if (fillSelected.length < remainingNeeded) {
+    const fillIdSet = new Set(fillSelected.map((c) => c.id));
+    const topUp = shuffleArray(remainingPool.filter((c) => !fillIdSet.has(c.id))).slice(
+      0,
+      remainingNeeded - fillSelected.length
+    );
+    fillSelected.push(...topUp);
+  }
+
+  const picked = [...pinnedCats, ...shuffleArray(fillSelected)];
 
   picked.forEach((c) => {
     const idx = recentPlayedCategoryIds.indexOf(c.id);
@@ -1214,9 +1273,15 @@ app.get("/api/categories", (req, res) => {
     title: c.title,
     theme: c.theme,
     hint: c.hint,
-    answerCount: c.answers.length
+    answerCount: c.answers.length,
+    source: isWorkshopCategory(c) ? "workshop" : String(c.id || "").startsWith("ai-") ? "ai" : "builtin",
+    createdBy: c.createdBy || null,
+    createdAt: c.createdAt || 0
   }));
-  res.json({ categories: list });
+  const workshopCategories = list
+    .filter((c) => c.source === "workshop")
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  res.json({ categories: list, workshopCategories });
 });
 
 const customRate = new Map(); // ip -> [timestamps]
@@ -1226,16 +1291,17 @@ app.post("/api/categories/custom", (req, res) => {
   const ip = req.ip || "x";
   const now = Date.now();
   const hits = (customRate.get(ip) || []).filter((t) => now - t < 3600000);
-  if (hits.length >= 5) {
+  if (hits.length >= 25) {
     return res.status(429).json({ error: "Terlalu banyak kategori dibuat. Coba lagi dalam satu jam." });
   }
-  const { title, theme, hint, educationalNote, answers } = req.body || {};
+  const { title, theme, hint, educationalNote, answers, createdBy } = req.body || {};
   if (!title || !Array.isArray(answers) || answers.length < 4) {
     return res.status(400).json({
       error: "Masukkan judul kategori dan minimal 4 jawaban beserta skor kelangkaannya."
     });
   }
-  if ((runtimeData.customCategories || []).length >= 500) {
+  if (!Array.isArray(runtimeData.customCategories)) runtimeData.customCategories = [];
+  if (runtimeData.customCategories.length >= 500) {
     return res.status(503).json({ error: "Workshop sedang penuh." });
   }
 
@@ -1259,6 +1325,9 @@ app.post("/api/categories/custom", (req, res) => {
     theme: clip(theme || "umum", 30),
     hint: clip(hint || "Kategori kreasi komunitas Palung.io!", 200),
     educationalNote: clip(educationalNote || "Dibuat oleh pemain di Workshop Palung.io.", 300),
+    source: "workshop",
+    createdBy: clip(createdBy || "Komunitas", 40),
+    createdAt: now,
     answers: cleanAnswers
   };
 
@@ -1266,6 +1335,19 @@ app.post("/api/categories/custom", (req, res) => {
   customRate.set(ip, hits);
   runtimeData.customCategories.push(newCat);
   saveRuntimeData();
+
+  io.emit("categories:updated", {
+    category: {
+      id: newCat.id,
+      title: newCat.title,
+      theme: newCat.theme,
+      hint: newCat.hint,
+      answerCount: newCat.answers.length,
+      source: "workshop",
+      createdBy: newCat.createdBy,
+      createdAt: newCat.createdAt
+    }
+  });
 
   res.json({ success: true, category: newCat });
 });
@@ -1524,6 +1606,9 @@ io.on("connection", (socket) => {
       const normalized = normalizeRoomThemes(newSettings.themes || newSettings.theme);
       room.settings.theme = normalized.theme;
       room.settings.themes = normalized.themes;
+    }
+    if (Array.isArray(newSettings.pinnedCategoryIds)) {
+      room.settings.pinnedCategoryIds = sanitizePinnedCategoryIds(newSettings.pinnedCategoryIds);
     }
     if (typeof newSettings.collisionRule === "boolean") {
       room.settings.collisionRule = newSettings.collisionRule;

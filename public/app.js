@@ -559,7 +559,7 @@ document.querySelectorAll(".mnav-item").forEach((btn) => {
     } else if (action === "mobilehub") {
       openMobileHubModal();
     } else if (action === "workshop") {
-      document.getElementById("modal-workshop").classList.remove("hidden");
+      openWorkshopModal("create");
     }
   });
 });
@@ -694,7 +694,7 @@ function shuffleClientArray(arr) {
   return copy;
 }
 
-function startLocalOfflineMatch({ isDaily = false } = {}) {
+function startLocalOfflineMatch({ isDaily = false, pinnedCategories = [] } = {}) {
   clearClientTimers();
   isLocalOfflineGame = true;
   const { name, avatar } = getIdentity();
@@ -706,10 +706,24 @@ function startLocalOfflineMatch({ isDaily = false } = {}) {
   } catch (e) {
     recentIds = [];
   }
+
+  const validPinned = [];
+  const pinnedIds = new Set();
+  for (const cat of pinnedCategories || []) {
+    if (cat && Array.isArray(cat.answers) && cat.answers.length >= 4 && !pinnedIds.has(cat.id)) {
+      pinnedIds.add(cat.id);
+      validPinned.push(cat);
+    }
+  }
+
   const recentSet = new Set(recentIds);
-  const fresh = shuffleClientArray(allCats.filter((c) => !recentSet.has(c.id)));
-  const stale = shuffleClientArray(allCats.filter((c) => recentSet.has(c.id)));
-  const selected = [...fresh, ...stale].slice(0, 7);
+  const remainingPool = allCats.filter((c) => !pinnedIds.has(c.id));
+  const localCustomIds = new Set(readLocalCustomCategories().map((c) => c.id));
+  const customFresh = shuffleClientArray(remainingPool.filter((c) => localCustomIds.has(c.id) && !recentSet.has(c.id)));
+  const otherFresh = shuffleClientArray(remainingPool.filter((c) => !localCustomIds.has(c.id) && !recentSet.has(c.id)));
+  const stale = shuffleClientArray(remainingPool.filter((c) => recentSet.has(c.id)));
+  const remainingNeeded = Math.max(0, 7 - validPinned.length);
+  const selected = [...validPinned, ...[...customFresh, ...otherFresh, ...stale].slice(0, remainingNeeded)];
   try {
     const updated = [...recentIds.filter((id) => !selected.some((c) => c.id === id)), ...selected.map((c) => c.id)].slice(-35);
     localStorage.setItem("palung_recent_offline_cats", JSON.stringify(updated));
@@ -1373,9 +1387,13 @@ if (socket) {
       })
       .join("");
   });
+  socket.on("categories:updated", () => {
+    refreshWorkshopCategories();
+  });
 }
 
 loadHomeInfo();
+refreshWorkshopCategories();
 
 // Cek jika URL memiliki parameter ?room=ABCD (dari hasil scan QR / klik link WA)
 window.addEventListener("DOMContentLoaded", () => {
@@ -1630,9 +1648,172 @@ const THEME_DISPLAY_NAMES = {
   sains: "Sains & Alam",
   nusantara: "Nusantara",
   geografi: "Geografi Dunia",
-  umum: "Umum & Tech"
+  umum: "Umum & Tech",
+  workshop: "Komunitas"
 };
 const CORE_THEMES = ["sains", "nusantara", "geografi", "umum"];
+let workshopCategoriesCache = [];
+
+function readLocalCustomCategories() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("palung_custom_cats") || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeLocalCustomCategories(list) {
+  try {
+    localStorage.setItem("palung_custom_cats", JSON.stringify(Array.isArray(list) ? list : []));
+  } catch (e) {}
+}
+
+function mergeWorkshopCategories(serverList = [], localList = []) {
+  const byKey = new Map();
+  const localByTitle = new Map();
+  localList.forEach((lc) => {
+    if (lc && lc.title) localByTitle.set(normalizeText(lc.title), lc);
+  });
+
+  serverList.forEach((sc) => {
+    if (!sc || !sc.id) return;
+    const matchedLocal = localList.find((lc) => lc.id === sc.id) || localByTitle.get(normalizeText(sc.title));
+    byKey.set(String(sc.id), {
+      ...sc,
+      answers: matchedLocal && Array.isArray(matchedLocal.answers) ? matchedLocal.answers : sc.answers,
+      isLocalOnly: false,
+      createdAt: Number(sc.createdAt) || 0
+    });
+  });
+
+  localList.forEach((lc) => {
+    if (!lc || !lc.title) return;
+    const lid = String(lc.id || "");
+    if (lid && byKey.has(lid)) return;
+    const normT = normalizeText(lc.title);
+    const alreadyOnServer = [...byKey.values()].some((s) => normalizeText(s.title) === normT);
+    if (alreadyOnServer) return;
+    byKey.set(lid || `local-${normT}`, {
+      id: lid || `local-${Date.now()}`,
+      title: lc.title,
+      theme: lc.theme || "umum",
+      hint: lc.hint || "Kategori kreasi komunitas Palung.io!",
+      educationalNote: lc.educationalNote || "Kategori kreasi pemain Palung.io.",
+      answerCount: Array.isArray(lc.answers) ? lc.answers.length : Number(lc.answerCount) || 0,
+      answers: lc.answers,
+      source: "workshop",
+      createdBy: lc.createdBy || "Perangkat Ini",
+      createdAt: Number(lc.createdAt) || 0,
+      isLocalOnly: lid.startsWith("local-") || !lid
+    });
+  });
+
+  return [...byKey.values()].sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+}
+
+function getLobbyPinnedIds() {
+  if (currentRoom && currentRoom.settings && Array.isArray(currentRoom.settings.pinnedCategoryIds)) {
+    return currentRoom.settings.pinnedCategoryIds.map((id) => String(id));
+  }
+  return [];
+}
+
+function renderLobbyWorkshopPicker(room, isHost) {
+  const listEl = document.getElementById("lobby-workshop-list");
+  const summaryEl = document.getElementById("lobby-pinned-summary");
+  if (!listEl) return;
+
+  const pinnedIds =
+    room && room.settings && Array.isArray(room.settings.pinnedCategoryIds)
+      ? room.settings.pinnedCategoryIds.map((id) => String(id))
+      : [];
+  const pinnedIndexMap = new Map(pinnedIds.map((id, idx) => [id, idx + 1]));
+
+  if (summaryEl) {
+    summaryEl.textContent =
+      pinnedIds.length > 0
+        ? `Dipasang: ${pinnedIds.length} soal (mulai Ronde 1)`
+        : "Opsional • tampil mulai Ronde 1";
+  }
+
+  if (workshopCategoriesCache.length === 0) {
+    listEl.innerHTML = `<div class="lobby-ws-empty">Belum ada soal Workshop. Klik <strong>+ Buat Soal</strong> untuk membuatnya!</div>`;
+    return;
+  }
+
+  listEl.innerHTML = workshopCategoriesCache
+    .map((cat) => {
+      const cid = String(cat.id);
+      const order = pinnedIndexMap.get(cid);
+      const isPinned = Boolean(order);
+      return `<button type="button" class="lobby-ws-chip ${isPinned ? "active" : ""}" data-cat-id="${escapeHtml(cid)}" ${
+        !isHost ? "disabled" : ""
+      } title="${escapeHtml(cat.hint || cat.title)}">${isPinned ? `📌 #${order} ` : ""}${escapeHtml(cat.title)}</button>`;
+    })
+    .join("");
+}
+
+async function ensureCategorySyncedToServer(cat) {
+  if (!cat) return null;
+  if (!cat.isLocalOnly && !String(cat.id || "").startsWith("local-")) return cat;
+  if (!socket || !socket.connected) return cat;
+
+  const localList = readLocalCustomCategories();
+  const fullLocal = localList.find((lc) => String(lc.id) === String(cat.id)) || cat;
+  if (!Array.isArray(fullLocal.answers) || fullLocal.answers.length < 4) return cat;
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/categories/custom`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: fullLocal.title,
+        theme: fullLocal.theme || "umum",
+        hint: fullLocal.hint || "",
+        educationalNote: fullLocal.educationalNote || "",
+        createdBy: getIdentity().name,
+        answers: fullLocal.answers
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data && data.category) {
+      const updated = localList.map((lc) =>
+        String(lc.id) === String(cat.id)
+          ? { ...data.category, createdAt: data.category.createdAt || Date.now(), isLocalOnly: false }
+          : lc
+      );
+      writeLocalCustomCategories(updated);
+      await refreshWorkshopCategories();
+      return { ...data.category, answerCount: data.category.answers.length, isLocalOnly: false };
+    }
+  } catch (err) {}
+  return cat;
+}
+
+async function refreshWorkshopCategories() {
+  const localList = readLocalCustomCategories();
+  let serverWorkshop = [];
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/categories`);
+    if (res.ok) {
+      const data = await res.json();
+      serverWorkshop = Array.isArray(data.workshopCategories)
+        ? data.workshopCategories
+        : (data.categories || []).filter((c) => c.source === "workshop" || String(c.id || "").startsWith("custom-"));
+    }
+  } catch (err) {}
+
+  workshopCategoriesCache = mergeWorkshopCategories(serverWorkshop, localList);
+  const countBadge = document.getElementById("ws-list-count");
+  if (countBadge) countBadge.textContent = String(workshopCategoriesCache.length);
+
+  renderWorkshopCategoryList();
+  if (currentRoom && currentRoom.state === "LOBBY") {
+    const myId = socket ? socket.id : "me";
+    renderLobbyWorkshopPicker(currentRoom, currentRoom.hostId === myId);
+  }
+}
 
 function getSelectedThemesList() {
   const group = document.getElementById("setting-theme-group");
@@ -1670,14 +1851,16 @@ function renderThemeChips(roomSettings, isHost) {
   }
 }
 
-function emitRoomSettingsUpdate() {
+function emitRoomSettingsUpdate(overridePinnedIds = null) {
   if (!socket) return;
   const maxVal = document.getElementById("setting-maxplayers");
   const selectedThemes = getSelectedThemesList();
+  const pinnedCategoryIds = Array.isArray(overridePinnedIds) ? overridePinnedIds : getLobbyPinnedIds();
   socket.emit("room:settings", {
     gameMode: document.getElementById("setting-gamemode").value,
     themes: selectedThemes,
     theme: selectedThemes.join(","),
+    pinnedCategoryIds,
     roundsTotal: Number(document.getElementById("setting-rounds").value),
     roundDuration: Number(document.getElementById("setting-duration").value),
     maxPlayers: maxVal ? Number(maxVal.value) || 8 : 8,
@@ -1749,6 +1932,8 @@ function renderLobby(room) {
 
   selMode.value = room.settings.gameMode || "competitive";
   renderThemeChips(room.settings || {}, isHost);
+  renderLobbyWorkshopPicker(room, isHost);
+  if (workshopCategoriesCache.length === 0) refreshWorkshopCategories();
   selRounds.value = String(room.settings.roundsTotal || 7);
   selDuration.value = String(room.settings.roundDuration || 25);
   if (inpMaxPlayers) inpMaxPlayers.value = String(maxP);
@@ -1783,9 +1968,38 @@ document.getElementById("btn-qr-room").addEventListener("click", () => {
   (id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener("change", emitRoomSettingsUpdate);
+    el.addEventListener("change", () => emitRoomSettingsUpdate());
   }
 );
+
+const btnLobbyOpenWorkshop = document.getElementById("btn-lobby-open-workshop");
+if (btnLobbyOpenWorkshop) {
+  btnLobbyOpenWorkshop.addEventListener("click", () => {
+    openWorkshopModal("create");
+  });
+}
+
+const lobbyWorkshopList = document.getElementById("lobby-workshop-list");
+if (lobbyWorkshopList) {
+  lobbyWorkshopList.addEventListener("click", async (e) => {
+    const chip = e.target.closest(".lobby-ws-chip");
+    if (!chip || chip.disabled || !currentRoom) return;
+    const rawId = chip.dataset.catId;
+    const cat = workshopCategoriesCache.find((c) => String(c.id) === String(rawId));
+    if (!cat) return;
+
+    const synced = await ensureCategorySyncedToServer(cat);
+    const targetId = String((synced && synced.id) || rawId);
+    const currentPinned = getLobbyPinnedIds();
+    const nextPinned = currentPinned.includes(targetId)
+      ? currentPinned.filter((id) => id !== targetId)
+      : [...currentPinned, targetId];
+    if (currentRoom.settings) currentRoom.settings.pinnedCategoryIds = nextPinned;
+    renderLobbyWorkshopPicker(currentRoom, true);
+    emitRoomSettingsUpdate(nextPinned);
+    playSonarPing(720, 0.1);
+  });
+}
 
 const themeChipGroup = document.getElementById("setting-theme-group");
 if (themeChipGroup) {
@@ -4277,8 +4491,262 @@ document.querySelectorAll(".react-btn").forEach((btn) => {
 // ============================================================================
 const modalWorkshop = document.getElementById("modal-workshop");
 
-document.getElementById("btn-open-workshop").addEventListener("click", () => {
+function switchWorkshopTab(tabName = "create") {
+  const showList = tabName === "list";
+  const createPanel = document.getElementById("ws-panel-create");
+  const listPanel = document.getElementById("ws-panel-list");
+  if (createPanel) createPanel.classList.toggle("hidden", showList);
+  if (listPanel) listPanel.classList.toggle("hidden", !showList);
+
+  document.querySelectorAll(".ws-tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.wsTab === (showList ? "list" : "create"));
+  });
+  if (showList) renderWorkshopCategoryList();
+}
+
+function openWorkshopModal(defaultTab = "create") {
+  if (!modalWorkshop) return;
+  const savePlayBtn = document.getElementById("btn-workshop-save-play");
+  const myId = socket ? socket.id : "me";
+  const inLobbyAsHost = Boolean(
+    currentRoom && !isLocalOfflineGame && currentRoom.state === "LOBBY" && currentRoom.hostId === myId
+  );
+  if (savePlayBtn) {
+    savePlayBtn.textContent = inLobbyAsHost ? "📌 Simpan & Pasang di Room" : "🚀 Simpan & Pakai di Game";
+  }
+  switchWorkshopTab(defaultTab);
   modalWorkshop.classList.remove("hidden");
+  refreshWorkshopCategories();
+}
+
+function renderWorkshopCategoryList() {
+  const container = document.getElementById("ws-category-list");
+  if (!container) return;
+  if (!workshopCategoriesCache || workshopCategoriesCache.length === 0) {
+    container.innerHTML = `<div class="empty-state">Belum ada kategori Workshop. Buat kategori pertamamu di tab "Buat Baru"!</div>`;
+    return;
+  }
+
+  const myId = socket ? socket.id : "me";
+  const inLobbyAsHost = Boolean(
+    currentRoom && !isLocalOfflineGame && currentRoom.state === "LOBBY" && currentRoom.hostId === myId
+  );
+  const pinnedSet = new Set(getLobbyPinnedIds());
+
+  container.innerHTML = workshopCategoriesCache
+    .map((cat) => {
+      const cid = String(cat.id);
+      const isPinned = inLobbyAsHost && pinnedSet.has(cid);
+      const themeLabel = THEME_DISPLAY_NAMES[cat.theme] || cat.theme || "Umum";
+      const playBtnText = isPinned
+        ? "✅ Terpasang di Room"
+        : inLobbyAsHost
+        ? "📌 Pasang di Room"
+        : "🚀 Mainkan";
+      return `
+        <div class="ws-cat-card">
+          <div class="ws-cat-info">
+            <div class="ws-cat-title">${escapeHtml(cat.title)}</div>
+            <div class="ws-cat-meta">
+              <span class="ws-cat-badge">${escapeHtml(themeLabel)}</span>
+              <span>• ${Number(cat.answerCount) || (cat.answers ? cat.answers.length : 0)} jawaban</span>
+              ${cat.createdBy ? `<span>• oleh ${escapeHtml(cat.createdBy)}</span>` : ""}
+              ${cat.isLocalOnly ? `<span class="ws-cat-badge">📱 Lokal HP</span>` : ""}
+            </div>
+          </div>
+          <div class="ws-cat-actions">
+            <button type="button" class="ws-btn-play ${isPinned ? "ws-btn-pinned" : ""}" data-ws-action="play" data-cat-id="${escapeHtml(cid)}">${playBtnText}</button>
+            ${
+              cat.isLocalOnly
+                ? `<button type="button" class="ws-btn-del" data-ws-action="delete" data-cat-id="${escapeHtml(cid)}" title="Hapus dari Daftar Lokal">🗑️</button>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function useWorkshopCategoryInGame(cat) {
+  if (!cat) return;
+  const myId = socket ? socket.id : "me";
+  const isOnline = Boolean(socket && socket.connected);
+
+  if (currentRoom && !isLocalOfflineGame && currentRoom.state === "LOBBY") {
+    const synced = await ensureCategorySyncedToServer(cat);
+    const targetId = String((synced && synced.id) || cat.id);
+    if (currentRoom.hostId === myId) {
+      const nextPinned = [targetId, ...getLobbyPinnedIds().filter((id) => id !== targetId)];
+      if (currentRoom.settings) currentRoom.settings.pinnedCategoryIds = nextPinned;
+      renderLobbyWorkshopPicker(currentRoom, true);
+      emitRoomSettingsUpdate(nextPinned);
+      modalWorkshop.classList.add("hidden");
+      showToast(`📌 "${cat.title}" dipasang di Room ini (Ronde 1)!`);
+    } else {
+      modalWorkshop.classList.add("hidden");
+      showToast(`📋 "${cat.title}" tersimpan! Minta Host memilihnya di Daftar Workshop Lobby.`);
+    }
+    return;
+  }
+
+  if (isOnline) {
+    const synced = await ensureCategorySyncedToServer(cat);
+    const targetId = String((synced && synced.id) || cat.id);
+    const { name, avatar } = getIdentity();
+    isLocalOfflineGame = false;
+    socket.emit(
+      "room:create",
+      {
+        name,
+        avatar,
+        isPublic: true,
+        clientId: getClientId(),
+        settings: {
+          pinnedCategoryIds: [targetId],
+          themes: ["all"],
+          roundsTotal: 5
+        }
+      },
+      (res) => {
+        if (res && res.success && res.room) {
+          modalWorkshop.classList.add("hidden");
+          currentRoom = res.room;
+          renderLobby(currentRoom);
+          showScreen("lobby");
+          showToast(`🚀 Room siap! "${cat.title}" terpasang di Ronde 1 — klik MULAI MENYELAM!`);
+        } else {
+          showToast("❌ Gagal menyiapkan room dengan kategori ini.");
+        }
+      }
+    );
+    return;
+  }
+
+  // Fallback offline (Mode Mandiri HP)
+  const localMatches = readLocalCustomCategories();
+  const fullCat =
+    (Array.isArray(cat.answers) && cat.answers.length >= 4 && cat) ||
+    localMatches.find((lc) => String(lc.id) === String(cat.id) || normalizeText(lc.title) === normalizeText(cat.title)) ||
+    cat;
+  if (!Array.isArray(fullCat.answers) || fullCat.answers.length < 4) {
+    showToast("⚠️ Kategori ini tersimpan di server. Hubungkan internet untuk memainkannya.");
+    return;
+  }
+  modalWorkshop.classList.add("hidden");
+  startLocalOfflineMatch({ isDaily: false, pinnedCategories: [fullCat] });
+  showToast(`🚀 Langsung bermain dengan "${fullCat.title}" di Ronde 1!`);
+}
+
+async function handleWorkshopSubmit(mode = "play") {
+  const title = document.getElementById("ws-title").value.trim();
+  const theme = document.getElementById("ws-theme").value;
+  const hint = document.getElementById("ws-hint").value.trim();
+  const rawLines = document.getElementById("ws-answers").value.split("\n");
+
+  if (!title) {
+    showToast("⚠️ Masukkan Judul Pertanyaan Kategori terlebih dahulu!");
+    document.getElementById("ws-title").focus();
+    return;
+  }
+
+  const answers = [];
+  rawLines.forEach((line) => {
+    const parts = line.split("|").map((s) => s.trim());
+    if (parts[0]) {
+      answers.push({
+        name: parts[0],
+        score: Math.min(100, Math.max(10, Number(parts[1]) || 50)),
+        fact: parts[2] || "Jawaban kategori komunitas Palung.io!"
+      });
+    }
+  });
+
+  if (answers.length < 4) {
+    showToast("⚠️ Masukkan minimal 4 baris jawaban!");
+    return;
+  }
+
+  const btnPlay = document.getElementById("btn-workshop-save-play");
+  const btnList = document.getElementById("btn-workshop-save-list");
+  if (btnPlay) btnPlay.disabled = true;
+  if (btnList) btnList.disabled = true;
+
+  let savedCat = null;
+  let savedOnline = false;
+
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/categories/custom`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        theme,
+        hint,
+        createdBy: getIdentity().name,
+        answers
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(`❌ ${data.error || "Gagal menyimpan kategori ke server."}`);
+      return;
+    }
+    if (data && data.category) {
+      savedCat = {
+        ...data.category,
+        answerCount: data.category.answers ? data.category.answers.length : answers.length,
+        createdAt: data.category.createdAt || Date.now(),
+        isLocalOnly: false
+      };
+      savedOnline = true;
+    }
+  } catch (err) {
+    // Offline atau server tidak terjangkau — fallback ke LocalStorage HP
+  } finally {
+    if (btnPlay) btnPlay.disabled = false;
+    if (btnList) btnList.disabled = false;
+  }
+
+  if (!savedCat) {
+    savedCat = {
+      id: "local-" + Date.now(),
+      title,
+      theme,
+      hint: hint || "Kategori kreasi komunitas Palung.io!",
+      educationalNote: "Kategori kreasi pemain Palung.io.",
+      source: "workshop",
+      createdBy: getIdentity().name,
+      createdAt: Date.now(),
+      isLocalOnly: true,
+      answers
+    };
+  }
+
+  const localCustom = readLocalCustomCategories();
+  localCustom.push(savedCat);
+  writeLocalCustomCategories(localCustom);
+
+  playDiveLock();
+  document.getElementById("form-workshop").reset();
+  loadHomeInfo();
+  await refreshWorkshopCategories();
+
+  if (mode === "list") {
+    switchWorkshopTab("list");
+    showToast(
+      savedOnline
+        ? `📋 Kategori "${savedCat.title}" masuk ke Daftar Kategori Server & HP!`
+        : `📋 Kategori "${savedCat.title}" disimpan ke Daftar Lokal HP!`
+    );
+    return;
+  }
+
+  await useWorkshopCategoryInGame(savedCat);
+}
+
+document.getElementById("btn-open-workshop").addEventListener("click", () => {
+  openWorkshopModal("create");
 });
 
 document.getElementById("btn-close-workshop").addEventListener("click", () => {
@@ -4288,6 +4756,52 @@ document.getElementById("btn-close-workshop").addEventListener("click", () => {
 document.getElementById("btn-cancel-workshop").addEventListener("click", () => {
   modalWorkshop.classList.add("hidden");
 });
+
+const btnWsCloseFromList = document.getElementById("btn-ws-close-from-list");
+if (btnWsCloseFromList) {
+  btnWsCloseFromList.addEventListener("click", () => {
+    modalWorkshop.classList.add("hidden");
+  });
+}
+
+const btnWsNewFromList = document.getElementById("btn-ws-new-from-list");
+if (btnWsNewFromList) {
+  btnWsNewFromList.addEventListener("click", () => {
+    switchWorkshopTab("create");
+    const titleInp = document.getElementById("ws-title");
+    if (titleInp) titleInp.focus();
+  });
+}
+
+document.querySelectorAll(".ws-tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    switchWorkshopTab(btn.dataset.wsTab || "create");
+  });
+});
+
+const wsCategoryList = document.getElementById("ws-category-list");
+if (wsCategoryList) {
+  wsCategoryList.addEventListener("click", async (e) => {
+    const actionBtn = e.target.closest("[data-ws-action]");
+    if (!actionBtn) return;
+    const action = actionBtn.dataset.wsAction;
+    const catId = actionBtn.dataset.catId;
+    const cat = workshopCategoriesCache.find((c) => String(c.id) === String(catId));
+    if (!cat) return;
+
+    if (action === "delete" && cat.isLocalOnly) {
+      const remaining = readLocalCustomCategories().filter((lc) => String(lc.id) !== String(catId));
+      writeLocalCustomCategories(remaining);
+      await refreshWorkshopCategories();
+      showToast(`🗑️ Kategori "${cat.title}" dihapus dari daftar lokal.`);
+      return;
+    }
+
+    if (action === "play") {
+      await useWorkshopCategoryInGame(cat);
+    }
+  });
+}
 
 const btnWsAiGenerate = document.getElementById("btn-ws-ai-generate");
 if (btnWsAiGenerate) {
@@ -4329,55 +4843,16 @@ if (btnWsAiGenerate) {
   });
 }
 
+const btnWorkshopSaveList = document.getElementById("btn-workshop-save-list");
+if (btnWorkshopSaveList) {
+  btnWorkshopSaveList.addEventListener("click", () => {
+    handleWorkshopSubmit("list");
+  });
+}
+
 document.getElementById("form-workshop").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const title = document.getElementById("ws-title").value.trim();
-  const theme = document.getElementById("ws-theme").value;
-  const hint = document.getElementById("ws-hint").value.trim();
-  const rawLines = document.getElementById("ws-answers").value.split("\n");
-
-  const answers = [];
-  rawLines.forEach((line) => {
-    const parts = line.split("|").map((s) => s.trim());
-    if (parts[0]) {
-      answers.push({
-        name: parts[0],
-        score: Number(parts[1]) || 50,
-        fact: parts[2] || "Jawaban kategori komunitas Palung.io!"
-      });
-    }
-  });
-
-  if (answers.length < 4) {
-    showToast("⚠️ Masukkan minimal 4 baris jawaban!");
-    return;
-  }
-
-  // Simpan juga ke LocalStorage agar tersedia saat Offline di HP!
-  const localCustom = JSON.parse(localStorage.getItem("palung_custom_cats") || "[]");
-  localCustom.push({
-    id: "local-" + Date.now(),
-    title,
-    theme,
-    hint: hint || "Kategori kreasi komunitas Palung.io!",
-    educationalNote: "Kategori kreasi pemain Palung.io.",
-    answers
-  });
-  localStorage.setItem("palung_custom_cats", JSON.stringify(localCustom));
-
-  try {
-    await fetch(`${apiBaseUrl}/api/categories/custom`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, theme, hint, answers })
-    });
-  } catch (err) {}
-
-  playDiveLock();
-  modalWorkshop.classList.add("hidden");
-  document.getElementById("form-workshop").reset();
-  showToast(`✅ Kategori "${title}" berhasil disimpan ke Server & Memori HP!`);
-  loadHomeInfo();
+  await handleWorkshopSubmit("play");
 });
 
 // ============================================================================

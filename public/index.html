@@ -398,6 +398,20 @@
                 <button type="button" class="theme-chip-btn" data-theme="nusantara">🇮🇩 Nusantara</button>
                 <button type="button" class="theme-chip-btn" data-theme="geografi">🗺️ Geografi Dunia</button>
                 <button type="button" class="theme-chip-btn" data-theme="umum">💡 Umum &amp; Tech</button>
+                <button type="button" class="theme-chip-btn" data-theme="workshop">🛠️ Komunitas</button>
+              </div>
+            </div>
+
+            <div class="setting-item lobby-workshop-box">
+              <div class="setting-label-row">
+                <label>🛠️ Soal Workshop di Room Ini</label>
+                <div class="lobby-ws-head-right">
+                  <small id="lobby-pinned-summary" class="theme-summary-hint">Opsional • tampil mulai Ronde 1</small>
+                  <button type="button" class="btn-small" id="btn-lobby-open-workshop">+ Buat Soal</button>
+                </div>
+              </div>
+              <div id="lobby-workshop-list" class="lobby-workshop-list">
+                <div class="lobby-ws-empty">Memuat daftar kategori Workshop...</div>
               </div>
             </div>
 
@@ -760,16 +774,22 @@
 
   <!-- ==================== MODAL 2: WORKSHOP BUAT KATEGORI SENDIRI ==================== -->
   <div id="modal-workshop" class="modal-overlay hidden">
-    <div class="modal-card glass-card">
+    <div class="modal-card glass-card modal-workshop-card">
       <div class="modal-header">
         <h2>🛠️ Workshop Kategori Komunitas Palung.io</h2>
         <button class="icon-btn" id="btn-close-workshop">✕</button>
       </div>
       <p class="modal-desc">
-        Buat kategori kuis sendiri (misalnya untuk materi sekolah, kumpul keluarga, atau topik komunitasmu) lengkap dengan skor kelangkaannya!
+        Buat kategori kuis sendiri (misalnya untuk materi sekolah, kumpul keluarga, atau topik komunitasmu) lalu pakai langsung di game atau simpan ke daftar!
       </p>
 
-      <form id="form-workshop">
+      <div class="workshop-tabs" role="tablist">
+        <button type="button" class="ws-tab-btn active" data-ws-tab="create">✏️ Buat Baru</button>
+        <button type="button" class="ws-tab-btn" data-ws-tab="list">📋 Daftar Kategori <span id="ws-list-count" class="ws-count-badge">0</span></button>
+      </div>
+
+      <div id="ws-panel-create" class="ws-tab-panel">
+        <form id="form-workshop">
         <div class="form-row-2">
           <div class="form-group">
             <label>Judul Pertanyaan Kategori</label>
@@ -805,9 +825,22 @@ Anoa | 65 | Kerbau kerdil endemik hutan Sulawesi"></textarea>
 
         <div class="modal-footer">
           <button type="button" class="btn-secondary" id="btn-cancel-workshop">Batal</button>
-          <button type="submit" class="btn-primary">💾 Simpan & Tambahkan ke Game</button>
+          <button type="button" class="btn-secondary" id="btn-workshop-save-list">📋 Simpan ke Daftar</button>
+          <button type="submit" class="btn-primary" id="btn-workshop-save-play">🚀 Simpan &amp; Pakai di Game</button>
         </div>
       </form>
+      </div>
+
+      <div id="ws-panel-list" class="ws-tab-panel hidden">
+        <p class="ws-list-hint">Kategori buatanmu &amp; komunitas. Klik <strong>Mainkan</strong> untuk langsung memakainya di Ronde 1, atau pasang ke Room Lobby aktif.</p>
+        <div id="ws-category-list" class="ws-category-list">
+          <div class="empty-state">Belum ada kategori Workshop. Buat kategori pertamamu di tab "Buat Baru"!</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-ws-close-from-list">Tutup</button>
+          <button type="button" class="btn-primary" id="btn-ws-new-from-list">+ Buat Kategori Baru</button>
+        </div>
+      </div>
     </div>
   </div>
 
