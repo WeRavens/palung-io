@@ -672,6 +672,7 @@ function startNextRound(room) {
   }
 
   room.state = "PLAYING";
+  room.aiGraceDeadline = null;
   room.roundSubmissions = {};
   room.players.forEach((p) => {
     p.readyInRound = false;
@@ -748,11 +749,22 @@ function startNextRound(room) {
       room.botTimeouts.push(t);
     });
 
-  // Timer cek batas waktu
+  // Timer cek batas waktu (+ grace period maks 3 detik bila ada pemain masih menunggu koreksi AI)
   room.timerInterval = setInterval(() => {
-    if (Date.now() >= room.roundDeadline) {
+    const now = Date.now();
+    if (now >= room.roundDeadline) {
+      const anyoneCheckingAi = room.players.some((p) => !p.isBot && p.isCheckingAi);
+      if (anyoneCheckingAi) {
+        if (!room.aiGraceDeadline) {
+          room.aiGraceDeadline = now + 3000;
+        }
+        if (now < room.aiGraceDeadline) {
+          return;
+        }
+      }
       clearInterval(room.timerInterval);
       room.timerInterval = null;
+      room.aiGraceDeadline = null;
       endRoundAndReveal(room);
     }
   }, 250);
@@ -1578,6 +1590,7 @@ io.on("connection", (socket) => {
 
     const currentCat = room.selectedCategories[room.currentRound - 1];
     if (!currentCat) return replyErr("Kategori ronde tidak ditemukan.");
+    const submittedRound = room.currentRound;
 
     let match = matchCategoryAnswer(currentCat, answer);
     let aiModelUsed = null;
@@ -1585,13 +1598,16 @@ io.on("connection", (socket) => {
 
     if (!match && ai.isEnabled() && (answer || "").trim().length >= 2) {
       player.isCheckingAi = true;
+      const remainingMs = Math.max(0, (room.roundDeadline || 0) - Date.now());
+      const aiTimeoutMs = Math.max(2500, Math.min(6000, remainingMs + 2500));
       try {
         const aiVerdict = await ai.validateAnswerWithAI(
           currentCat.title,
           currentCat.hint,
-          (answer || "").trim()
+          (answer || "").trim(),
+          { timeoutMs: aiTimeoutMs }
         );
-        if (room.state !== "PLAYING") {
+        if (room.state !== "PLAYING" || room.currentRound !== submittedRound) {
           return replyErr("Waktu ronde keburu habis.");
         }
         if (aiVerdict && aiVerdict.valid) {
@@ -1614,8 +1630,14 @@ io.on("connection", (socket) => {
         aiError = true;
         console.warn("[AI] Gagal memvalidasi jawaban:", err.message);
       } finally {
-        player.isCheckingAi = false;
+        if (room.currentRound === submittedRound) {
+          player.isCheckingAi = false;
+        }
       }
+    }
+
+    if (room.state !== "PLAYING" || room.currentRound !== submittedRound) {
+      return replyErr("Waktu ronde keburu habis.");
     }
 
     if (!match) {
@@ -1775,7 +1797,9 @@ io.on("connection", (socket) => {
       foundRoom.state === "PLAYING" && currentCat
         ? {
             round: foundRoom.currentRound,
-            totalRounds: foundRoom.settings.totalRounds,
+            roundsTotal: foundRoom.settings.totalRounds,
+            deadline: foundRoom.roundDeadline,
+            serverNow: Date.now(),
             category: {
               id: currentCat.id,
               title: currentCat.title,
@@ -1784,18 +1808,23 @@ io.on("connection", (socket) => {
             },
             durationSeconds: Math.max(
               3,
-              Math.ceil(((foundRoom.roundEndsAt || Date.now()) - Date.now()) / 1000)
+              Math.ceil(((foundRoom.roundDeadline || Date.now()) - Date.now()) / 1000)
             ),
             room: serializeRoom(foundRoom),
             alreadySubmitted: Boolean(foundRoom.roundSubmissions[socket.id])
           }
+        : null;
+    const lastReveal =
+      foundRoom.state === "REVEAL" && foundRoom.roundHistory && foundRoom.roundHistory.length
+        ? foundRoom.roundHistory[foundRoom.roundHistory.length - 1]
         : null;
 
     if (typeof callback === "function") {
       callback({
         success: true,
         room: serializeRoom(foundRoom),
-        roundData
+        roundData,
+        lastReveal
       });
     }
   });

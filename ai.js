@@ -98,7 +98,7 @@ async function callCloudWorkerAI(messages, { temperature = 0.25, maxTokens = 800
   }
 }
 
-async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
+async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput, { timeoutMs = 6000 } = {}) {
   if (!isEnabled()) return null;
 
   const systemPrompt =
@@ -110,15 +110,19 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
 
   const userPrompt = `Kategori: "${categoryTitle}"\nPetunjuk: "${categoryHint || "-"}"\nJawaban pemain: "${rawInput}"\nApakah jawaban ini benar secara faktual?`;
 
+  const budgetMs = Math.max(2500, Math.min(8000, Math.round(Number(timeoutMs)) || 6000));
+  const startedAt = Date.now();
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
+    const remaining = budgetMs - (Date.now() - startedAt);
+    if (attempt > 1 && remaining < 1800) break;
     try {
       const { model, content } = await callCloudWorkerAI(
         [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        { temperature: 0.15, maxTokens: 700 }
+        { temperature: 0.15, maxTokens: 700, timeoutMs: Math.max(2000, remaining) }
       );
 
       const parsed = extractJsonObject(content);
@@ -139,6 +143,7 @@ async function validateAnswerWithAI(categoryTitle, categoryHint, rawInput) {
       };
     } catch (err) {
       lastErr = err;
+      if (err && err.name === "AbortError") break;
     }
   }
   throw lastErr;

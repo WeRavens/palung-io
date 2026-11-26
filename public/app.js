@@ -27,6 +27,7 @@ let lanBaseUrl = window.location.origin;
 let deferredPwaPrompt = null;
 let roundTimerInterval = null;
 let revealCountdownInterval = null;
+let onlineRevealWatchdog = null;
 let localBotTimeouts = [];
 let lastTickSecond = -1;
 
@@ -1333,8 +1334,8 @@ if (socket) {
           if (res.roundData.alreadySubmitted) {
             lockAnswerUI("Terkirim", "Menunggu", 0);
           }
-        } else if (res.room.state === "REVEAL") {
-          showScreen("reveal");
+        } else if (res.room.state === "REVEAL" && res.lastReveal) {
+          handleRoundRevealUI(res.lastReveal);
         } else if (res.room.state === "LOBBY") {
           renderLobby(currentRoom);
           showScreen("lobby");
@@ -1799,6 +1800,10 @@ function clearClientTimers() {
     clearInterval(revealCountdownInterval);
     revealCountdownInterval = null;
   }
+  if (onlineRevealWatchdog) {
+    clearTimeout(onlineRevealWatchdog);
+    onlineRevealWatchdog = null;
+  }
   if (localBotTimeouts.length) {
     localBotTimeouts.forEach((t) => clearTimeout(t));
     localBotTimeouts = [];
@@ -1931,6 +1936,10 @@ function renderGameScreen(room) {
 }
 
 function handleRoundStartUI(payload) {
+  if (onlineRevealWatchdog) {
+    clearTimeout(onlineRevealWatchdog);
+    onlineRevealWatchdog = null;
+  }
   showScreen("game");
   setBgmMood("diving");
   triggerSonarRipple("rgba(56, 189, 248, 0.5)");
@@ -2006,9 +2015,28 @@ function handleRoundStartUI(payload) {
 
     if (remainingMs <= 0) {
       clearInterval(roundTimerInterval);
+      roundTimerInterval = null;
       setBgmMood("calm");
       if (isLocalOfflineGame) {
         revealLocalRound();
+      } else {
+        if (onlineRevealWatchdog) clearTimeout(onlineRevealWatchdog);
+        onlineRevealWatchdog = setTimeout(() => {
+          onlineRevealWatchdog = null;
+          setAnswerSubmitting(false);
+          const playingEl = document.getElementById("phase-playing");
+          if (socket && socket.connected && playingEl && !playingEl.classList.contains("hidden")) {
+            socket.emit("session:reconnect", { clientId: getClientId() }, (res) => {
+              if (!res || !res.success || !res.room) return;
+              currentRoom = res.room;
+              if (res.room.state === "REVEAL" && res.lastReveal) {
+                handleRoundRevealUI(res.lastReveal);
+              } else if (res.room.state === "PLAYING" && res.roundData) {
+                handleRoundStartUI(res.roundData);
+              }
+            });
+          }
+        }, 4500);
       }
     }
   }, 100);
@@ -2063,7 +2091,7 @@ function setAnswerSubmitting(pending, waitingForAi = false) {
   if (pending) {
     submitSafetyTimer = setTimeout(() => {
       setAnswerSubmitting(false);
-    }, 16000);
+    }, 9000);
   }
 }
 
@@ -2105,11 +2133,20 @@ document.getElementById("form-answer").addEventListener("submit", (e) => {
       ? getLocalCategories().find((c) => c.id === currentRoom.category.id)
       : null;
   const knownLocally = Boolean(localCat && matchLocalAnswer(localCat, raw));
+  const submittedRound = currentRoom ? currentRoom.currentRound : 0;
   setAnswerSubmitting(true, !knownLocally);
 
   socket.emit("round:submit", { answer: raw }, (res) => {
     setAnswerSubmitting(false);
-    if (!res) return;
+    const playingEl = document.getElementById("phase-playing");
+    if (
+      !res ||
+      !currentRoom ||
+      currentRoom.currentRound !== submittedRound ||
+      (playingEl && playingEl.classList.contains("hidden"))
+    ) {
+      return;
+    }
     if (!res.valid) {
       playErrorBuzz();
       wrapper.classList.remove("shake");
@@ -3382,6 +3419,10 @@ if (btnCloseRevealDetail && revealDetailDrawer && btnToggleRevealDetail) {
 // FASE REVEAL HASIL RONDE & FAKTA EDUKATIF
 // ============================================================================
 function handleRoundRevealUI(payload) {
+  if (onlineRevealWatchdog) {
+    clearTimeout(onlineRevealWatchdog);
+    onlineRevealWatchdog = null;
+  }
   setBgmMood("calm");
   setAnswerSubmitting(false);
   if (typeof oceanWorld !== "undefined") {
