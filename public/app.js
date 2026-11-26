@@ -1625,6 +1625,66 @@ document.getElementById("btn-leave-lobby").addEventListener("click", () => {
 // ============================================================================
 // LAYAR LOBBY MULTIPLAYER
 // ============================================================================
+const THEME_DISPLAY_NAMES = {
+  all: "Semua Topik",
+  sains: "Sains & Alam",
+  nusantara: "Nusantara",
+  geografi: "Geografi Dunia",
+  umum: "Umum & Tech"
+};
+const CORE_THEMES = ["sains", "nusantara", "geografi", "umum"];
+
+function getSelectedThemesList() {
+  const group = document.getElementById("setting-theme-group");
+  if (!group) return ["all"];
+  const active = [...group.querySelectorAll(".theme-chip-btn.active")].map((b) => b.dataset.theme);
+  if (active.length === 0 || active.includes("all")) return ["all"];
+  return active;
+}
+
+function renderThemeChips(roomSettings, isHost) {
+  const group = document.getElementById("setting-theme-group");
+  const summaryEl = document.getElementById("setting-theme-summary");
+  if (!group) return;
+  const rawThemes =
+    Array.isArray(roomSettings.themes) && roomSettings.themes.length
+      ? roomSettings.themes
+      : roomSettings.theme && roomSettings.theme !== "all"
+      ? String(roomSettings.theme)
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : ["all"];
+  const isAll = rawThemes.includes("all") || CORE_THEMES.every((t) => rawThemes.includes(t));
+  const activeSet = new Set(isAll ? ["all"] : rawThemes);
+
+  group.querySelectorAll(".theme-chip-btn").forEach((btn) => {
+    btn.classList.toggle("active", activeSet.has(btn.dataset.theme));
+    btn.disabled = !isHost;
+  });
+
+  if (summaryEl) {
+    summaryEl.textContent = isAll
+      ? "Aktif: Semua Topik"
+      : "Aktif: " + [...activeSet].map((t) => THEME_DISPLAY_NAMES[t] || t).join(", ");
+  }
+}
+
+function emitRoomSettingsUpdate() {
+  if (!socket) return;
+  const maxVal = document.getElementById("setting-maxplayers");
+  const selectedThemes = getSelectedThemesList();
+  socket.emit("room:settings", {
+    gameMode: document.getElementById("setting-gamemode").value,
+    themes: selectedThemes,
+    theme: selectedThemes.join(","),
+    roundsTotal: Number(document.getElementById("setting-rounds").value),
+    roundDuration: Number(document.getElementById("setting-duration").value),
+    maxPlayers: maxVal ? Number(maxVal.value) || 8 : 8,
+    collisionRule: document.getElementById("setting-collision").checked
+  });
+}
+
 function renderLobby(room) {
   document.getElementById("lobby-room-code").textContent = room.code;
   document.getElementById("lobby-player-count").textContent = room.players.length;
@@ -1682,20 +1742,19 @@ function renderLobby(room) {
     .join("");
 
   const selMode = document.getElementById("setting-gamemode");
-  const selTheme = document.getElementById("setting-theme");
   const selRounds = document.getElementById("setting-rounds");
   const selDuration = document.getElementById("setting-duration");
   const inpMaxPlayers = document.getElementById("setting-maxplayers");
   const chkCollision = document.getElementById("setting-collision");
 
   selMode.value = room.settings.gameMode || "competitive";
-  selTheme.value = room.settings.theme || "all";
+  renderThemeChips(room.settings || {}, isHost);
   selRounds.value = String(room.settings.roundsTotal || 7);
   selDuration.value = String(room.settings.roundDuration || 25);
   if (inpMaxPlayers) inpMaxPlayers.value = String(maxP);
   chkCollision.checked = room.settings.collisionRule !== false;
 
-  [selMode, selTheme, selRounds, selDuration, inpMaxPlayers, chkCollision].forEach((el) => {
+  [selMode, selRounds, selDuration, inpMaxPlayers, chkCollision].forEach((el) => {
     if (el) el.disabled = !isHost;
   });
 }
@@ -1720,24 +1779,36 @@ document.getElementById("btn-qr-room").addEventListener("click", () => {
   openMobileHubModal(currentRoom.code);
 });
 
-["setting-gamemode", "setting-theme", "setting-rounds", "setting-duration", "setting-maxplayers", "setting-collision"].forEach(
+["setting-gamemode", "setting-rounds", "setting-duration", "setting-maxplayers", "setting-collision"].forEach(
   (id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener("change", () => {
-      if (!socket) return;
-      const maxVal = document.getElementById("setting-maxplayers");
-      socket.emit("room:settings", {
-        gameMode: document.getElementById("setting-gamemode").value,
-        theme: document.getElementById("setting-theme").value,
-        roundsTotal: Number(document.getElementById("setting-rounds").value),
-        roundDuration: Number(document.getElementById("setting-duration").value),
-        maxPlayers: maxVal ? Number(maxVal.value) || 8 : 8,
-        collisionRule: document.getElementById("setting-collision").checked
-      });
-    });
+    el.addEventListener("change", emitRoomSettingsUpdate);
   }
 );
+
+const themeChipGroup = document.getElementById("setting-theme-group");
+if (themeChipGroup) {
+  themeChipGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".theme-chip-btn");
+    if (!btn || btn.disabled) return;
+    const clicked = btn.dataset.theme;
+    const current = getSelectedThemesList();
+    let next;
+    if (clicked === "all") {
+      next = ["all"];
+    } else if (current.includes("all")) {
+      next = [clicked];
+    } else {
+      const set = new Set(current);
+      if (set.has(clicked)) set.delete(clicked);
+      else set.add(clicked);
+      next = set.size === 0 || CORE_THEMES.every((t) => set.has(t)) ? ["all"] : [...set];
+    }
+    renderThemeChips({ themes: next }, true);
+    emitRoomSettingsUpdate();
+  });
+}
 
 document.getElementById("btn-start-game").addEventListener("click", () => {
   playDiveLock();

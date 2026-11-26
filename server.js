@@ -357,6 +357,31 @@ const SUBMARINE_COLORS = [
   "#c084fc", "#fb923c", "#2dd4bf", "#a3e635"
 ];
 
+function normalizeRoomThemes(themeInput) {
+  const validThemes = new Set(["sains", "nusantara", "geografi", "umum", ...getAllCategories().map((c) => c.theme)]);
+  const rawList = Array.isArray(themeInput)
+    ? themeInput
+    : typeof themeInput === "string"
+    ? themeInput.split(",")
+    : [];
+  const cleaned = [];
+  const seen = new Set();
+  for (const item of rawList) {
+    const t = String(item || "").trim().toLowerCase();
+    if (!t || seen.has(t)) continue;
+    if (t === "all") return { theme: "all", themes: ["all"] };
+    if (validThemes.has(t)) {
+      seen.add(t);
+      cleaned.push(t);
+    }
+  }
+  const coreThemes = ["sains", "nusantara", "geografi", "umum"];
+  if (cleaned.length === 0 || coreThemes.every((t) => seen.has(t))) {
+    return { theme: "all", themes: ["all"] };
+  }
+  return { theme: cleaned.join(","), themes: cleaned };
+}
+
 function createRoom({
   hostSocketId,
   hostName,
@@ -366,6 +391,9 @@ function createRoom({
   settings = {}
 }) {
   const code = generateRoomCode();
+  const normalizedThemes = isDaily
+    ? { theme: "all", themes: ["all"] }
+    : normalizeRoomThemes(settings.themes || settings.theme);
   const room = {
     code,
     hostId: hostSocketId,
@@ -376,7 +404,8 @@ function createRoom({
       roundsTotal: isDaily ? 7 : Math.min(15, Math.max(3, Math.round(Number(settings.roundsTotal)) || 7)),
       roundDuration: isDaily ? 25 : Math.min(60, Math.max(10, Math.round(Number(settings.roundDuration)) || 25)),
       maxPlayers: isDaily ? 8 : Math.min(20, Math.max(2, Math.round(Number(settings.maxPlayers)) || 8)),
-      theme: isDaily ? "all" : typeof settings.theme === "string" ? settings.theme.slice(0, 30) : "all",
+      theme: normalizedThemes.theme,
+      themes: normalizedThemes.themes,
       collisionRule: isDaily ? false : settings.collisionRule !== false,
       gameMode: isDaily ? "daily" : ["competitive", "coop", "tide", "puffer"].includes(settings.gameMode) ? settings.gameMode : "competitive"
     },
@@ -604,8 +633,18 @@ function selectCategoriesForRoom(room) {
   }
   const all = getAllCategories();
   let filtered = all;
-  if (room.settings.theme && room.settings.theme !== "all") {
-    filtered = all.filter((c) => c.theme === room.settings.theme);
+  const activeThemes =
+    Array.isArray(room.settings.themes) && room.settings.themes.length
+      ? room.settings.themes
+      : room.settings.theme && room.settings.theme !== "all"
+      ? String(room.settings.theme)
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : ["all"];
+  if (!activeThemes.includes("all")) {
+    const themeSet = new Set(activeThemes);
+    filtered = all.filter((c) => themeSet.has(c.theme));
   }
   if (filtered.length < room.settings.roundsTotal) {
     filtered = all;
@@ -643,7 +682,12 @@ function startGame(room) {
   room.settings.roundsTotal = room.selectedCategories.length;
 
   // Perbanyak soal di background menggunakan Cloudflare Worker AI tanpa menunda mulai game
-  expandQuestionBankWithAI(room.settings.theme || "all");
+  const aiSeedThemes =
+    Array.isArray(room.settings.themes) && room.settings.themes.length
+      ? room.settings.themes
+      : ["all"];
+  const pickedAiTheme = aiSeedThemes[Math.floor(Math.random() * aiSeedThemes.length)] || "all";
+  expandQuestionBankWithAI(pickedAiTheme);
 
   room.players.forEach((p) => {
     p.totalDepth = 0;
@@ -1476,9 +1520,10 @@ io.on("connection", (socket) => {
         room.players.splice(lastBotIdx, 1);
       }
     }
-    if (typeof newSettings.theme === "string") {
-      const themes = new Set(getAllCategories().map((c) => c.theme));
-      if (newSettings.theme === "all" || themes.has(newSettings.theme)) room.settings.theme = newSettings.theme;
+    if (Array.isArray(newSettings.themes) || typeof newSettings.theme === "string") {
+      const normalized = normalizeRoomThemes(newSettings.themes || newSettings.theme);
+      room.settings.theme = normalized.theme;
+      room.settings.themes = normalized.themes;
     }
     if (typeof newSettings.collisionRule === "boolean") {
       room.settings.collisionRule = newSettings.collisionRule;

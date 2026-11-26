@@ -388,14 +388,17 @@
             </div>
 
             <div class="setting-item">
-              <label>Tema Kategori Wawasan</label>
-              <select id="setting-theme">
-                <option value="all">🌍 Semua Topik (Sains, Nusantara, Geografi, Umum)</option>
-                <option value="sains">🧬 Sains, Biologi, Antariksa & Alam</option>
-                <option value="nusantara">🇮🇩 Budaya, Kuliner, Pahlawan & Geografi Nusantara</option>
-                <option value="geografi">🗺️ Geografi, Negara, Sungai & Danau Dunia</option>
-                <option value="umum">💡 Pengetahuan Umum, Profesi, Olahraga & Teknologi</option>
-              </select>
+              <div class="setting-label-row">
+                <label>Tema Kategori Wawasan (Bisa pilih lebih dari 1)</label>
+                <small id="setting-theme-summary" class="theme-summary-hint">Aktif: Semua Topik</small>
+              </div>
+              <div id="setting-theme-group" class="theme-chips-grid" role="group" aria-label="Tema Kategori Wawasan">
+                <button type="button" class="theme-chip-btn active" data-theme="all">🌍 Semua</button>
+                <button type="button" class="theme-chip-btn" data-theme="sains">🧬 Sains &amp; Alam</button>
+                <button type="button" class="theme-chip-btn" data-theme="nusantara">🇮🇩 Nusantara</button>
+                <button type="button" class="theme-chip-btn" data-theme="geografi">🗺️ Geografi Dunia</button>
+                <button type="button" class="theme-chip-btn" data-theme="umum">💡 Umum &amp; Tech</button>
+              </div>
             </div>
 
             <div class="setting-row-2">
