@@ -92,7 +92,7 @@ function sanitizePinnedCategoryIds(rawIds) {
     if (!strId || seen.has(strId) || !validSet.has(strId)) continue;
     seen.add(strId);
     cleaned.push(strId);
-    if (cleaned.length >= 15) break;
+    if (cleaned.length >= 30) break;
   }
   return cleaned;
 }
@@ -420,7 +420,7 @@ function createRoom({
     isDaily: Boolean(isDaily),
     state: "LOBBY", // LOBBY | PLAYING | REVEAL | GAMEOVER
     settings: {
-      roundsTotal: isDaily ? 7 : Math.min(15, Math.max(3, Math.round(Number(settings.roundsTotal)) || 7)),
+      roundsTotal: isDaily ? 7 : Math.min(30, Math.max(1, Math.round(Number(settings.roundsTotal)) || 7)),
       roundDuration: isDaily ? 25 : Math.min(60, Math.max(10, Math.round(Number(settings.roundDuration)) || 25)),
       maxPlayers: isDaily ? 8 : Math.min(20, Math.max(2, Math.round(Number(settings.maxPlayers)) || 8)),
       theme: normalizedThemes.theme,
@@ -1588,7 +1588,7 @@ io.on("connection", (socket) => {
 
     if (!newSettings || typeof newSettings !== "object") return;
     const rounds = Math.round(Number(newSettings.roundsTotal));
-    if (Number.isFinite(rounds)) room.settings.roundsTotal = Math.min(15, Math.max(3, rounds));
+    if (Number.isFinite(rounds)) room.settings.roundsTotal = Math.min(30, Math.max(1, rounds));
     const dur = Math.round(Number(newSettings.roundDuration));
     if (Number.isFinite(dur)) room.settings.roundDuration = Math.min(60, Math.max(10, dur));
     const maxP = Math.round(Number(newSettings.maxPlayers));
@@ -1927,7 +1927,7 @@ io.on("connection", (socket) => {
       foundRoom.state === "PLAYING" && currentCat
         ? {
             round: foundRoom.currentRound,
-            roundsTotal: foundRoom.settings.totalRounds,
+            roundsTotal: foundRoom.settings.roundsTotal,
             deadline: foundRoom.roundDeadline,
             serverNow: Date.now(),
             category: {

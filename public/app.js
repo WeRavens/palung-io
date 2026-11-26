@@ -1854,6 +1854,9 @@ function renderThemeChips(roomSettings, isHost) {
 function emitRoomSettingsUpdate(overridePinnedIds = null) {
   if (!socket) return;
   const maxVal = document.getElementById("setting-maxplayers");
+  const roundsEl = document.getElementById("setting-rounds");
+  const roundsVal = roundsEl ? Math.min(30, Math.max(1, Math.round(Number(roundsEl.value)) || 7)) : 7;
+  if (roundsEl) roundsEl.value = String(roundsVal);
   const selectedThemes = getSelectedThemesList();
   const pinnedCategoryIds = Array.isArray(overridePinnedIds) ? overridePinnedIds : getLobbyPinnedIds();
   socket.emit("room:settings", {
@@ -1861,7 +1864,7 @@ function emitRoomSettingsUpdate(overridePinnedIds = null) {
     themes: selectedThemes,
     theme: selectedThemes.join(","),
     pinnedCategoryIds,
-    roundsTotal: Number(document.getElementById("setting-rounds").value),
+    roundsTotal: roundsVal,
     roundDuration: Number(document.getElementById("setting-duration").value),
     maxPlayers: maxVal ? Number(maxVal.value) || 8 : 8,
     collisionRule: document.getElementById("setting-collision").checked
@@ -1934,7 +1937,12 @@ function renderLobby(room) {
   renderThemeChips(room.settings || {}, isHost);
   renderLobbyWorkshopPicker(room, isHost);
   if (workshopCategoriesCache.length === 0) refreshWorkshopCategories();
-  selRounds.value = String(room.settings.roundsTotal || 7);
+  const roundsVal = Math.min(30, Math.max(1, Math.round(Number(room.settings.roundsTotal)) || 7));
+  selRounds.value = String(roundsVal);
+  document.querySelectorAll("#rounds-preset-group .round-preset-btn").forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.rounds) === roundsVal);
+    btn.disabled = !isHost;
+  });
   selDuration.value = String(room.settings.roundDuration || 25);
   if (inpMaxPlayers) inpMaxPlayers.value = String(maxP);
   chkCollision.checked = room.settings.collisionRule !== false;
@@ -1971,6 +1979,17 @@ document.getElementById("btn-qr-room").addEventListener("click", () => {
     el.addEventListener("change", () => emitRoomSettingsUpdate());
   }
 );
+
+const roundsPresetGroup = document.getElementById("rounds-preset-group");
+if (roundsPresetGroup) {
+  roundsPresetGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest(".round-preset-btn");
+    if (!btn || btn.disabled) return;
+    const roundsInp = document.getElementById("setting-rounds");
+    if (roundsInp) roundsInp.value = btn.dataset.rounds;
+    emitRoomSettingsUpdate();
+  });
+}
 
 const btnLobbyOpenWorkshop = document.getElementById("btn-lobby-open-workshop");
 if (btnLobbyOpenWorkshop) {
@@ -2152,6 +2171,7 @@ function updateCrewDrawerAndHud(room) {
   const pipsWrap = document.getElementById("hud-progress-pips");
   if (pipsWrap) {
     const total = room.roundsTotal || 7;
+    pipsWrap.classList.toggle("compact", total > 10);
     const cur = room.currentRound || 1;
     const tiers = (myPlayer && myPlayer.historyTiers) || [];
     let html = "";
